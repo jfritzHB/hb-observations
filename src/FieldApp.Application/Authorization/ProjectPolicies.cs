@@ -13,6 +13,7 @@ public static class ProjectPolicies
         ProjectOperation.ViewProject => ProjectRolesExtensions.All,
         ProjectOperation.ViewReferenceData => ProjectRolesExtensions.All,
         ProjectOperation.ManageAreas => ProjectRoles.ProjectManager | ProjectRoles.Administrator,
+        ProjectOperation.CaptureItems => ProjectRoles.Superintendent | ProjectRoles.ProjectManager | ProjectRoles.Administrator,
         _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "Unknown project operation."),
     };
 

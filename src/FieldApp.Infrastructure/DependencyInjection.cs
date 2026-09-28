@@ -1,9 +1,12 @@
 using FieldApp.Application.Authorization;
 using FieldApp.Application.Identity;
+using FieldApp.Application.Items;
 using FieldApp.Application.ReferenceData;
 using FieldApp.Infrastructure.Health;
+using FieldApp.Infrastructure.Imaging;
 using FieldApp.Infrastructure.Persistence;
 using FieldApp.Infrastructure.Seeding;
+using FieldApp.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -46,13 +49,19 @@ public static class DependencyInjection
         services.AddScoped<IAreaStore>(provider => provider.GetRequiredService<EfWriteStore>());
         services.AddScoped<IAuditLog>(provider => provider.GetRequiredService<EfWriteStore>());
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<EfWriteStore>());
+        services.AddScoped<IFieldItemStore>(provider => provider.GetRequiredService<EfWriteStore>());
+
+        services.AddSingleton<PhotoContainerProvider>();
+        services.AddSingleton<IPhotoStorage, AzureBlobPhotoStorage>();
+        services.AddSingleton<IImageProcessor, SkiaImageProcessor>();
 
         services.AddScoped<DatabaseMigrator>();
         services.AddScoped<DemoDataSeeder>();
 
         services.AddScoped<IMigrationCatalog, EfMigrationCatalog>();
         services.AddHealthChecks()
-            .AddCheck<SqlDatabaseHealthCheck>("database", tags: [HealthCheckTags.Ready], timeout: _readinessTimeout);
+            .AddCheck<SqlDatabaseHealthCheck>("database", tags: [HealthCheckTags.Ready], timeout: _readinessTimeout)
+            .AddCheck<PhotoStorageHealthCheck>("photo-storage", tags: [HealthCheckTags.Ready], timeout: _readinessTimeout);
 
         return services;
     }

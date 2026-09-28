@@ -6,4 +6,7 @@ public enum ProjectOperation
     ViewProject,
     ViewReferenceData,
     ManageAreas,
+
+    /// <summary>Create field items and add their capture photos.</summary>
+    CaptureItems,
 }

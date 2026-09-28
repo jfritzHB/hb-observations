@@ -6,6 +6,7 @@ using FieldApp.Api.Endpoints;
 using FieldApp.Api.Health;
 using FieldApp.Application;
 using FieldApp.Application.Abstractions;
+using FieldApp.Application.Items;
 using FieldApp.Infrastructure;
 using Microsoft.AspNetCore.HttpOverrides;
 
@@ -14,7 +15,10 @@ var databaseCommand = DatabaseCommand.Parse(args);
 
 var builder = WebApplication.CreateBuilder(databaseCommand is null ? args : []);
 
-builder.Services.AddApplication();
+builder.Services.AddApplication(new PhotoPolicy
+{
+    MaxPhotoBytes = builder.Configuration.GetValue("Application:MaxPhotoBytes", 12L * 1024 * 1024),
+});
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFieldAppAuthentication();
 builder.Services.AddScoped<ICorrelationContext, HttpCorrelationContext>();
@@ -85,6 +89,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapHealthEndpoints();
 app.MapReferenceDataEndpoints();
+app.MapItemEndpoints();
 
 if (AuthenticationSetup.IsDevelopmentMode(app.Configuration))
 {

@@ -47,6 +47,10 @@ public sealed record ItemLocation
         return new ItemLocation(area?.Id, area?.Path, detail);
     }
 
+    /// <summary>Rehydrates a location already validated when it was stored.</summary>
+    public static ItemLocation Restore(Guid? areaId, string? areaPathSnapshot, string? locationDetail) =>
+        new(areaId, areaPathSnapshot, locationDetail);
+
     /// <summary>Enforces the publish-time invariant.</summary>
     public ItemLocation EnsureMeaningful() =>
         IsMeaningful

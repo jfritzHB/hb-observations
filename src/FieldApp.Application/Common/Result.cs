@@ -11,6 +11,18 @@ public enum ErrorKind
     Forbidden,
 
     Conflict,
+
+    /// <summary>413: larger than allowed.</summary>
+    PayloadTooLarge,
+
+    /// <summary>415: not a supported media type (by declared type or by actual content).</summary>
+    UnsupportedMediaType,
+
+    /// <summary>422: well-formed but the content could not be accepted (for example a hash mismatch).</summary>
+    Unprocessable,
+
+    /// <summary>503: a dependency failed; the operation can be retried.</summary>
+    Unavailable,
 }
 
 public sealed record AppError(ErrorKind Kind, string Title, IReadOnlyDictionary<string, string[]>? ValidationErrors = null)
@@ -21,6 +33,14 @@ public sealed record AppError(ErrorKind Kind, string Title, IReadOnlyDictionary<
         new(ErrorKind.Forbidden, title);
 
     public static AppError Conflict(string title) => new(ErrorKind.Conflict, title);
+
+    public static AppError PayloadTooLarge(string title) => new(ErrorKind.PayloadTooLarge, title);
+
+    public static AppError UnsupportedMediaType(string title) => new(ErrorKind.UnsupportedMediaType, title);
+
+    public static AppError Unprocessable(string title) => new(ErrorKind.Unprocessable, title);
+
+    public static AppError Unavailable(string title) => new(ErrorKind.Unavailable, title);
 
     public static AppError Validation(string field, string message) =>
         new(ErrorKind.Validation, "One or more validation errors occurred.", new Dictionary<string, string[]> { [field] = [message] });

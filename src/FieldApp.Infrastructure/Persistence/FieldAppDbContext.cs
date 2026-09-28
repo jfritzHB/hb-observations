@@ -1,6 +1,8 @@
 using FieldApp.Domain.Areas;
 using FieldApp.Domain.Audit;
+using FieldApp.Domain.Common;
 using FieldApp.Domain.Companies;
+using FieldApp.Domain.FieldItems;
 using FieldApp.Domain.Memberships;
 using FieldApp.Domain.Projects;
 using FieldApp.Domain.Trades;
@@ -26,6 +28,12 @@ public sealed class FieldAppDbContext(DbContextOptions<FieldAppDbContext> option
     public DbSet<ProjectMembership> ProjectMemberships => Set<ProjectMembership>();
 
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+
+    public DbSet<FieldItem> FieldItems => Set<FieldItem>();
+
+    public DbSet<FieldItemPhoto> FieldItemPhotos => Set<FieldItemPhoto>();
+
+    public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

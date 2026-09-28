@@ -1,5 +1,6 @@
 using FieldApp.Infrastructure.Persistence;
 using FieldApp.Infrastructure.Seeding;
+using FieldApp.Infrastructure.Storage;
 
 namespace FieldApp.Api.Database;
 
@@ -41,6 +42,13 @@ public sealed partial class DatabaseCommand(bool seedDemoData)
         try
         {
             await scope.ServiceProvider.GetRequiredService<DatabaseMigrator>().MigrateAsync(cancellationToken);
+
+            // The private photo container is provisioned by this controlled step, not by application startup.
+            var photoContainers = scope.ServiceProvider.GetRequiredService<PhotoContainerProvider>();
+            if (photoContainers.IsConfigured)
+            {
+                await photoContainers.EnsureContainerAsync(cancellationToken);
+            }
 
             if (SeedDemoData)
             {
