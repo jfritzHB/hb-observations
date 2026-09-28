@@ -71,6 +71,8 @@ Start with `CLAUDE.md`, then implement Slice 0 and Slice 1 in `docs/08-implement
 
 Prerequisites: Docker, the .NET 10 SDK and Node.js 22.12 or later (the last two are only needed to work outside containers).
 
+On Windows, clone to a short path (or enable long paths): the Playwright package copies deeply nested files into `tests/FieldApp.E2ETests/bin` and the build fails if the full path exceeds 260 characters.
+
 ### Run everything in containers (one command)
 
 Create a local `.env` once, setting `FIELDAPP_SQL_PASSWORD` to a strong password of your own (SQL Server requires upper/lower case, digits and symbols). `.env` is git-ignored; never commit it.
