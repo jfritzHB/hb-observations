@@ -1,4 +1,5 @@
 import { Navigate, type RouteObject } from 'react-router';
+import { DraftPage } from './capture/DraftPage';
 import { NewItemPage } from './capture/NewItemPage';
 import { ItemsPage } from './pages/ItemsPage';
 import { MorePage } from './pages/MorePage';
@@ -15,6 +16,7 @@ export const routes: RouteObject[] = [
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:projectId', element: <ProjectHomePage /> },
       { path: 'projects/:projectId/new-item', element: <NewItemPage /> },
+      { path: 'projects/:projectId/drafts/:clientDraftId', element: <DraftPage /> },
       { path: 'items', element: <ItemsPage /> },
       { path: 'more', element: <MorePage /> },
       { path: '*', element: <NotFoundPage /> },

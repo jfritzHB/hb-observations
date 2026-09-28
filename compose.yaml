@@ -15,7 +15,7 @@ services:
       dockerfile: Dockerfile
     image: fieldapp-local:latest
     ports:
-      - "8080:8080"
+      - "${FIELDAPP_APP_PORT:-8080}:8080"
     environment:
       <<: *app-database
       AzureOpenAI__Endpoint: ${FIELDAPP_AZURE_OPENAI_ENDPOINT:-}
@@ -51,7 +51,7 @@ services:
       MSSQL_PID: Developer
       MSSQL_SA_PASSWORD: ${FIELDAPP_SQL_PASSWORD:?Set FIELDAPP_SQL_PASSWORD in .env - see README}
     ports:
-      - "14333:1433"
+      - "${FIELDAPP_SQL_PORT:-14333}:1433"
     volumes:
       - fieldapp-sql:/var/opt/mssql
     healthcheck:
@@ -66,7 +66,7 @@ services:
     image: mcr.microsoft.com/azure-storage/azurite:latest
     command: ["azurite-blob", "--blobHost", "0.0.0.0", "--location", "/data", "--skipApiVersionCheck", "--loose"]
     ports:
-      - "10000:10000"
+      - "${FIELDAPP_BLOB_PORT:-10000}:10000"
     volumes:
       - fieldapp-blobs:/data
 

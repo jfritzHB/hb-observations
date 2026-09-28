@@ -91,7 +91,7 @@ describe('rapid capture', () => {
 
     expect(where()).toHaveValue('Unit 214');
     expect(document.querySelector('.location-area')).toBeNull();
-    expect(camera()).toHaveAccessibleDescription('Photo capture arrives in the next release');
+    expect(camera()).toHaveAttribute('aria-disabled', 'false');
     const writes = fetchMock.mock.calls.filter(([, init]) => (init?.method ?? 'GET') !== 'GET');
     expect(writes).toEqual([]);
   });
@@ -244,21 +244,22 @@ describe('rapid capture', () => {
     expect(screen.getByRole('radio', { name: 'Observation' })).not.toBeChecked();
   });
 
-  it('keeps Take photo as a disabled boundary that turns prominent when ready', async () => {
+  it('activates Take photo only once where, trade and type are set', async () => {
     const { user } = await openCapture();
 
     expect(camera()).toHaveAttribute('aria-disabled', 'true');
     expect(camera()).not.toHaveClass('camera-button--ready');
     expect(camera()).toHaveAccessibleDescription('Set where, trade and type');
+    expect(screen.queryByRole('button', { name: 'Choose existing photo' })).not.toBeInTheDocument();
 
     await user.type(where(), '201');
     await user.click(screen.getByRole('option', { name: 'Building A / Level 2 / Office 201' }));
     await user.click(screen.getByRole('button', { name: 'Drywall' }));
     await user.click(screen.getByRole('radio', { name: 'Punch List' }));
 
-    expect(camera()).toHaveAttribute('aria-disabled', 'true');
+    expect(camera()).toHaveAttribute('aria-disabled', 'false');
     expect(camera()).toHaveClass('camera-button--ready');
-    expect(camera()).toHaveAccessibleDescription('Photo capture arrives in the next release');
+    expect(screen.getByRole('button', { name: 'Choose existing photo' })).toBeInTheDocument();
   });
 
   it('clears everything in one tap', async () => {

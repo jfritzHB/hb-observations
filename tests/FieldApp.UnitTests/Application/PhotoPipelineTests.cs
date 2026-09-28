@@ -91,6 +91,20 @@ public sealed class PhotoPipelineTests
     }
 
     [Fact]
+    public async Task Late_incoming_bytes_cannot_replace_a_verified_original()
+    {
+        var (itemId, photoId) = await UploadedPhotoAsync(_jpeg);
+        await Photos().FinalizeAsync(itemId, photoId, CancellationToken);
+        var photo = _data.Items.Single().PrimaryPhoto!;
+        // Simulate an upload that passed authorization before finalization and completed afterwards.
+        _storage.Objects[photo.BlobKey + "/upload"] = [1, 2, 3];
+        var content = await Photos().OpenContentAsync(itemId, photoId, thumbnail: false, CancellationToken);
+        using var buffer = new MemoryStream();
+        await content.Value!.Content.CopyToAsync(buffer, CancellationToken);
+        Assert.Equal(_jpeg, buffer.ToArray());
+    }
+
+    [Fact]
     public async Task Thumbnail_storage_failure_leaves_the_photo_unfinalized_and_retry_succeeds()
     {
         var (itemId, photoId) = await UploadedPhotoAsync(_jpeg);

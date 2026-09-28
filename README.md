@@ -88,17 +88,20 @@ docker compose up --build
 ```
 
 - App (API and compiled React app): <http://localhost:8080>
-- Liveness: <http://localhost:8080/health/live>; readiness, including the database: <http://localhost:8080/health/ready>
+- Liveness: <http://localhost:8080/health/live>; readiness, including SQL and private Blob Storage: <http://localhost:8080/health/ready>
 - OpenAPI document (Development only): <http://localhost:8080/openapi/v1.json>
 - SQL Server: `localhost,14333` (user `sa`)
+- Azurite Blob service: `localhost:10000`; private photos live in the `fieldapp-blobs` Docker volume.
 
 Before the app starts, the one-shot `migrate` service runs the same image with `migrate --seed-demo-data`. It applies EF Core migrations (creating the database if needed) and loads the synthetic demo data, then exits. This mirrors the production design: migrations run as a separate, controlled step (a Container Apps Job or pipeline step), never at application startup.
 
 ### Run the API and web app natively
 
 ```bash
-docker compose up -d sql                                   # database only
+docker compose up -d sql azurite                           # local dependencies
 dotnet user-secrets set ConnectionStrings:AppDb "Server=localhost,14333;Database=FieldApp;User Id=sa;Password=<your password>;Encrypt=True;TrustServerCertificate=True" --project src/FieldApp.Api
+# Also set ConnectionStrings:PhotoStorage to the Azurite connection string in compose.yaml,
+# changing BlobEndpoint to http://localhost:10000/devstoreaccount1 for a native API process.
 dotnet run --project src/FieldApp.Api -- migrate --seed-demo-data   # apply migrations + synthetic data, then exit
 dotnet run --project src/FieldApp.Api --launch-profile http # http://localhost:5001
 
@@ -137,17 +140,27 @@ docker compose run --rm migrate                                # apply to the lo
 
 `/health/ready` reports unhealthy until every migration in the running build has been applied.
 
-### Manually testing capture (Slices 1 and 1.1)
+### Manually testing capture (Slice 2)
 
 1. `docker compose up --build`, then open <http://localhost:8080> (use the browser's device toolbar at 360px wide, or a phone on the same network).
 2. Choose **Owen Lars (Superintendent)**. Projects shows HB-TEST-001 and HB-TEST-002 only.
 3. Open **Mos Eisley Municipal Center** and tap **New Item**.
 4. In **Where?** type `201` and tap **Building A / Level 2 / Office 201**; then type `North wall` as extra location detail. (Or type `Unit 214` alone: free-text location detail never creates an Area. **Browse areas** chooses without typing.)
 5. Tap **Drywall**. **Responsible: Dune Sea Drywall Co.** appears immediately; there is no company picker.
-6. Tap **Punch List**. **Take photo** (docked above the navigation) turns prominent but stays a disabled boundary; photo capture arrives in Slice 2.
+6. Tap **Punch List**, then **Take photo** (camera on supported phones) or **Choose existing photo**. Use a synthetic image. Preview, retake/change/remove as needed, then tap **Use photo**. That action protects the processed photo and context in IndexedDB before any server call.
 7. Authorization boundary: **More → Beru Whitesun (Project Manager)** now shows only HB-TEST-001. Opening an HB-TEST-002 URL shows "Project not found". `curl -i -H "X-Dev-Persona: superintendent" -X POST -H "Content-Type: application/json" -d '{"name":"Roof"}' http://localhost:8080/api/v1/projects/<HB-TEST-001 id>/areas` returns 403, and the same call for HB-TEST-003 returns 404.
 
 Recent locations (area and/or detail) and trades are remembered on the device per user and project (browser storage), because server-side recency needs captured items, which later slices add.
+
+After **Use photo**, the app creates an idempotent server Draft, streams the reserved upload into private Blob Storage, and verifies/finalizes the photo and thumbnail. **Saved to the server as a draft** confirms the photo pipeline. English description is editable immediately, including during an interrupted upload; each edit is stored on this device. Wait for **Saved on this device** before refreshing. Refresh restores the photo, description and progress. **Items** lists captures on this device.
+
+Failure/recovery: after loading the capture screen, use browser DevTools Network **Offline**, accept a photo, and confirm the local failure status. Return **Online** to resume automatically, or tap **Try again**. For refresh recovery, block the upload or finalize URL, accept a photo, refresh, then unblock and retry. The same item and photo IDs are reused. No AI, translation, publish or server description save is implemented in Slice 2.
+
+Photo processing applies orientation, caps the long edge at 2560px (without upscaling), encodes JPEG at quality 0.86, and removes EXIF metadata. Processing runs in a Web Worker when supported. HEIC/HEIF requires browser decoding support; choose JPEG/PNG if the browser cannot read it. Fine-defect image quality still needs physical-device field validation.
+
+Local preview becomes durable only after **Use photo** succeeds. Browser storage can be cleared or evicted; it is temporary interruption protection, not a backup or full offline application. Discard removes the local copy only; server drafts and abandoned upload objects await an approved retention policy. Descriptions are not yet stored on the server.
+
+For a separate clean verification stack, set `FIELDAPP_APP_PORT=18080`, `FIELDAPP_SQL_PORT=24333` and `FIELDAPP_BLOB_PORT=11000`, then run `docker compose -p slice2-verification up --build --detach --wait app`. A new project name gets fresh SQL and Azurite volumes without deleting existing data. On PowerShell use `$env:NAME='value'` and `npm.cmd` if execution policy blocks `npm.ps1`.
 
 ### Checks (the same ones CI runs)
 

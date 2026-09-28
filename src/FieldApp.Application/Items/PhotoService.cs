@@ -73,10 +73,8 @@ public sealed class PhotoService(
             return AppError.Validation(ItemMapping.CamelCase(ex.Field ?? "request"), ex.Message);
         }
 
-        if (!reservation.Reused)
-        {
-            Audit(item, reservation.Photo, "PhotoUploadReserved", new { PhotoId = reservation.Photo.Id, reservation.Photo.MediaType, reservation.Photo.ByteLength });
-        }
+        Audit(item, reservation.Photo, reservation.Reused ? "PhotoUploadReservationReused" : "PhotoUploadReserved",
+            new { PhotoId = reservation.Photo.Id, reservation.Photo.MediaType, reservation.Photo.ByteLength });
 
         try
         {
@@ -146,7 +144,8 @@ public sealed class PhotoService(
         var limited = new LimitedReadStream(content, photo.ByteLength);
         try
         {
-            await storage.UploadAsync(photo.BlobKey, limited, photo.MediaType, cancellationToken);
+            // Incoming bytes never overwrite the verified original, including uploads already in flight at finalize.
+            await storage.UploadAsync(photo.BlobKey + "/upload", limited, photo.MediaType, cancellationToken);
         }
         catch (Exception) when (limited.Exceeded)
         {
@@ -155,6 +154,11 @@ public sealed class PhotoService(
         catch (PhotoStorageException)
         {
             return AppError.Unavailable("Photo storage is unavailable; retry the upload.");
+        }
+
+        if (photo.IsExpired(clock.GetUtcNow()))
+        {
+            return AppError.Conflict("The upload reservation expired; request a new upload.");
         }
 
         item.RecordPhotoUploaded(photo.Id, clock.GetUtcNow());
@@ -166,7 +170,7 @@ public sealed class PhotoService(
         }
         catch (ConcurrencyConflictException)
         {
-            // The bytes are stored; finalization verifies the object itself, so this is safe to ignore.
+            return AppError.Conflict("The photo changed during upload; retry to recover its current state.");
         }
 
         return true;
@@ -201,7 +205,14 @@ public sealed class PhotoService(
         byte[] bytes;
         try
         {
-            var stored = await storage.GetPropertiesAsync(photo.BlobKey, cancellationToken);
+            var incomingKey = photo.BlobKey + "/upload";
+            var stored = await storage.GetPropertiesAsync(incomingKey, cancellationToken);
+            // Resume reservations uploaded by the earlier Slice 2 implementation without losing those bytes.
+            if (stored is null)
+            {
+                incomingKey = photo.BlobKey;
+                stored = await storage.GetPropertiesAsync(incomingKey, cancellationToken);
+            }
             if (stored is null)
             {
                 return AppError.Conflict("The photo has not been uploaded yet.");
@@ -212,9 +223,17 @@ public sealed class PhotoService(
                 return AppError.Unprocessable("The uploaded photo is not the size that was reserved; upload it again.");
             }
 
-            await using var source = await storage.OpenReadAsync(photo.BlobKey, cancellationToken);
+            await using var source = await storage.OpenReadAsync(incomingKey, cancellationToken);
             using var buffer = new MemoryStream((int)photo.ByteLength);
-            await source.CopyToAsync(buffer, cancellationToken);
+            var limited = new LimitedReadStream(source, photo.ByteLength);
+            try
+            {
+                await limited.CopyToAsync(buffer, cancellationToken);
+            }
+            catch (Exception) when (limited.Exceeded)
+            {
+                return AppError.Unprocessable("The uploaded photo changed size; upload it again.");
+            }
             bytes = buffer.ToArray();
         }
         catch (PhotoStorageException)
@@ -246,6 +265,8 @@ public sealed class PhotoService(
         var thumbnailKey = photo.ThumbnailKeyFor();
         try
         {
+            using var verified = new MemoryStream(bytes, writable: false);
+            await storage.UploadAsync(photo.BlobKey, verified, photo.MediaType, cancellationToken);
             using var thumbnail = new MemoryStream(processed.ThumbnailJpeg, writable: false);
             await storage.UploadAsync(thumbnailKey, thumbnail, ImageSignature.Jpeg, cancellationToken);
         }

@@ -44,6 +44,7 @@ Capture UX refinement only, from product-owner testing. No persistence, camera, 
 - Server draft creation with idempotency, including optional `areaId` and `locationDetail`.
 - Camera/file picker attached to the Take Photo boundary, compression, preview, upload/finalize and thumbnail.
 - Restore draft after refresh; precise upload/error states.
+- Manual English description editor with local persistence after photo acceptance (moved forward from Slice 3 by the product owner's Slice 2 handoff). No AI, translation or publishing in this slice.
 
 **Done:** capture survives refresh, failed upload and a connectivity drop after load; retry produces one server item and one photo.
 

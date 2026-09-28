@@ -61,10 +61,10 @@ public sealed class CaptureSelectionTests
         await page.GetByText("Punch List", new() { Exact = true }).TapAsync();
         await Expect(page.GetByRole(AriaRole.Radio, new() { Name = "Punch List" })).ToBeCheckedAsync();
 
-        // Take Photo: prominent but still a disabled Slice 2 boundary, never covered by the navigation.
+        // Take Photo is now active and never covered by the navigation.
         await Expect(camera).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("camera-button--ready"));
-        await Expect(camera).ToBeDisabledAsync();
-        await Expect(page.GetByText("Photo capture arrives in the next release")).ToBeVisibleAsync();
+        await Expect(camera).ToBeEnabledAsync();
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Choose existing photo" })).ToBeVisibleAsync();
         await PhoneSession.AssertNotObscuredAsync(camera, "Take photo");
         await Expect(where).ToHaveValueAsync("North wall");
 

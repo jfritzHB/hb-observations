@@ -79,9 +79,117 @@ a {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
   color: inherit;
+}
+
+/* Slice 2 photo review and manual description, sized for phone portrait. */
+.preview__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 42dvh;
+  object-fit: contain;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+.preview__actions {
+  display: grid;
+  gap: 12px;
+}
+
+.preview__secondary {
+  display: flex;
+  gap: 8px;
+}
+
+.preview__secondary > * {
+  flex: 1;
+}
+.dock-secondary {
+  width: 100%;
+}
+.camera-note--error {
+  color: var(--danger);
+}
+
+.draft-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.draft-photo {
+  width: 104px;
+  height: 120px;
+  object-fit: contain;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.draft-context {
+  margin: 0;
+  min-width: 0;
+}
+.draft-context dd {
+  margin: 0 0 4px;
+}
+.draft-context__primary {
+  font-weight: 700;
+}
+.draft-context__muted {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.sync-status {
+  padding: 12px;
+  margin-bottom: 20px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.sync-status--problem {
+  border-color: var(--danger);
+}
+.sync-status__where {
+  font-size: 0.875rem;
+  margin-bottom: 4px;
+}
+.sync-status__title {
+  font-weight: 700;
+}
+.sync-status__detail {
+  margin-bottom: 0;
+}
+.sync-status__actions {
+  margin-top: 12px;
+}
+.sync-status__progress {
+  width: 100%;
+}
+
+.description__input {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  resize: vertical;
+  margin: 8px 0;
+}
+.draft-later {
+  margin: 20px 0;
+}
+.card__thumb {
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
 :focus-visible {

@@ -1,15 +1,19 @@
-import { useEffect, useId, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { isApiError } from '../api/client';
 import type { Area, CaptureTrade, Project } from '../api/types';
 import { useApiGet, type Loadable } from '../api/useApiGet';
-import { CameraIcon } from '../components/icons';
 import { ErrorMessage, Loading } from '../components/StatusMessage';
 import { ProjectNotFound } from '../pages/ProjectNotFound';
 import { useCurrentUser } from '../session/session';
+import { newId } from '../lib/ids';
 import { initialCaptureContext, isReadyForPhoto, type CaptureContext } from './captureContext';
+import { newCaptureDraft } from './drafts/draftModel';
+import { saveDraft } from './drafts/draftStore';
+import { useLocalDrafts } from './drafts/useDrafts';
 import { ItemTypeField } from './ItemTypeField';
 import { LocationField } from './LocationField';
+import { PhotoCaptureDock } from './PhotoCaptureDock';
 import {
   decodeLocation,
   encodeLocation,
@@ -22,8 +26,8 @@ import type { LocationChoice } from './selection';
 import { TradeField } from './TradeField';
 
 /**
- * Rapid capture (docs/02-mobile-ux.md, Slice 1.1): where, trade, type, then the photo. The camera is the Slice 2
- * boundary and is deliberately not available yet.
+ * Rapid capture (docs/02-mobile-ux.md): where, trade, type, then the photo. Accepting a photo creates a durable local
+ * draft (IndexedDB) before anything is sent, then continues on the draft screen.
  */
 export function NewItemPage() {
   const { projectId = '' } = useParams();
@@ -82,7 +86,10 @@ function RapidCapture({
   // new choices are still recorded and appear on the next capture.
   const [recentLocationKeys] = useState(() => readRecent(user.id, project.id, 'locations'));
   const [recentTradeIds] = useState(() => readRecent(user.id, project.id, 'trades'));
-  const cameraNoteId = useId();
+  const navigate = useNavigate();
+  const unfinished = (useLocalDrafts(user.id, project.id) ?? []).filter(
+    (draft) => draft.status !== 'ReadyForDescription',
+  );
 
   useEffect(() => {
     writeLastProjectId(user.id, project.id);
@@ -135,6 +142,17 @@ function RapidCapture({
         ) : null}
       </div>
 
+      {unfinished.length > 0 ? (
+        <div className="notice notice--compact" role="status">
+          <span>
+            {unfinished.length === 1
+              ? 'A capture has not reached the server yet.'
+              : `${String(unfinished.length)} captures have not reached the server yet.`}
+          </span>{' '}
+          <Link to={`/projects/${project.id}/drafts/${unfinished[0]?.clientDraftId ?? ''}`}>Resume</Link>
+        </div>
+      ) : null}
+
       <LocationField
         areas={areas}
         area={area}
@@ -174,20 +192,37 @@ function RapidCapture({
         }}
       />
 
-      <div className="capture-dock">
-        <button
-          type="button"
-          className={`camera-button${ready ? ' camera-button--ready' : ''}`}
-          aria-disabled="true"
-          aria-describedby={cameraNoteId}
-        >
-          <CameraIcon size={28} />
-          Take photo
-        </button>
-        <p id={cameraNoteId} className="camera-note">
-          {ready ? 'Photo capture arrives in the next release' : 'Set where, trade and type'}
-        </p>
-      </div>
+      <PhotoCaptureDock
+        ready={ready && trade !== null}
+        onPhotoAccepted={async (photo) => {
+          if (!trade || !context.itemType) return;
+          const draft = newCaptureDraft({
+            clientDraftId: newId(),
+            userId: user.id,
+            projectId: project.id,
+            projectName: project.name,
+            areaId: area?.id ?? null,
+            areaPath: area?.path ?? null,
+            locationDetail: context.locationDetail.trim(),
+            tradeId: trade.tradeId,
+            tradeName: trade.name,
+            responsibleCompanyName: trade.responsibleCompany.name,
+            itemType: context.itemType,
+            photo: {
+              data: await photo.blob.arrayBuffer(),
+              mediaType: photo.mediaType,
+              width: photo.width,
+              height: photo.height,
+              byteLength: photo.byteLength,
+              sha256: photo.sha256,
+              capturedAt: new Date().toISOString(),
+            },
+          });
+          // Protected on this device before any network call.
+          await saveDraft(draft);
+          await navigate(`/projects/${project.id}/drafts/${draft.clientDraftId}`);
+        }}
+      />
     </main>
   );
 }

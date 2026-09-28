@@ -36,6 +36,35 @@ export async function apiGet<T>(path: string, { persona, signal }: RequestOption
   return (await response.json()) as T;
 }
 
+export interface SendOptions extends RequestOptions {
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+
+/** Sends a JSON request to the API. Paths may be relative to /api/v1 or absolute (/api/v1/...). */
+export async function apiSend<T>(method: string, path: string, options: SendOptions): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json', ...options.headers };
+  if (options.persona) {
+    headers[devPersonaHeader] = options.persona;
+  }
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(path.startsWith(apiBase) ? path : `${apiBase}${path}`, {
+    method,
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, await readProblem(response));
+  }
+
+  const contentType = response.headers.get('Content-Type') ?? '';
+  return (contentType.includes('json') ? await response.json() : null) as T;
+}
+
 async function readProblem(response: Response): Promise<ProblemDetails | null> {
   const contentType = response.headers.get('Content-Type') ?? '';
   if (!contentType.includes('json')) {

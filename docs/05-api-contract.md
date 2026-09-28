@@ -51,11 +51,15 @@ Returns `201`, draft representation, ETag and item-scoped media instructions. Th
 
 Return a narrow upload URL or API upload token, expiry, photo ID, allowed content type and maximum bytes.
 
+Slice 2 uses an authenticated streaming API URL: `PUT /items/{itemId}/photos/{photoId}/content` with the reserved content type and bytes. The reservation expires after 15 minutes by default; it is bound to the authorized Draft, photo, type, byte length and SHA-256. The URL alone grants no access. Repeating a reservation for the same bytes reuses the photo ID; expired reservations renew. A different photo supersedes an unfinalized reservation. A finalized primary cannot be replaced through this endpoint. No storage credentials or SAS URLs reach the client.
+
 ### Finalize upload
 
 `POST /items/{itemId}/photos/{photoId}/finalize`
 
 Verifies blob existence, size/type/hash, extracts dimensions, creates thumbnail and marks photo ready. It is idempotent.
+
+Slice 2 stores incoming bytes separately from verified originals so an in-flight upload cannot overwrite a finalized photo. `GET /items/{itemId}/photos/{photoId}/content?variant=thumbnail` (default) or `variant=original` streams authorized, finalized media from private storage. SQL stores only keys and metadata. Drafts are visible to their creator within an active authorized project membership. Replay of draft creation returns `201` with `Idempotent-Replayed: true`; reuse with different input returns `409`. Finalize retries use the stable item/photo IDs as their idempotency identity.
 
 ### Analyze
 

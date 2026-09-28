@@ -86,7 +86,7 @@ public sealed class PhotoApiTests(SqlServerContainerFixture sqlServer) : IAsyncL
         var db = scope.ServiceProvider.GetRequiredService<FieldAppDbContext>();
         Assert.Equal(1, await db.FieldItemPhotos.CountAsync(p => p.FieldItemId == itemId && p.Status == PhotoStatus.Finalized, CancellationToken));
         var actions = await db.AuditEvents.Where(e => e.EntityId == reservation.PhotoId).Select(e => e.Action).ToListAsync(CancellationToken);
-        Assert.Equal(["PhotoContentUploaded", "PhotoFinalized", "PhotoUploadReserved"], actions.Order(StringComparer.Ordinal));
+        Assert.Equal(["PhotoContentUploaded", "PhotoFinalized", "PhotoUploadReservationReused", "PhotoUploadReserved"], actions.Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -174,6 +174,55 @@ public sealed class PhotoApiTests(SqlServerContainerFixture sqlServer) : IAsyncL
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, huge.StatusCode);
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, tooLong.StatusCode);
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, wrongType.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_unfinalized_photo_can_be_replaced_and_only_the_replacement_finalizes()
+    {
+        sqlServer.SkipIfUnavailable();
+        using var client = Client();
+        var itemId = await CreateItemAsync(client);
+        var oldBytes = TestImages.Jpeg(64, 48);
+        var old = await ReserveAsync(client, itemId, oldBytes);
+        await UploadAsync(client, old.UploadUrl, oldBytes);
+        var newBytes = TestImages.Jpeg(128, 96);
+        var replacement = await ReserveAsync(client, itemId, newBytes);
+        Assert.NotEqual(old.PhotoId, replacement.PhotoId);
+        await UploadAsync(client, replacement.UploadUrl, newBytes);
+        var rejected = await client.PostAsync($"/api/v1/items/{itemId}/photos/{old.PhotoId}/finalize", null, CancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+        var finalized = await client.PostAsync($"/api/v1/items/{itemId}/photos/{replacement.PhotoId}/finalize", null, CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, finalized.StatusCode);
+    }
+
+    [Fact]
+    public async Task Excessive_pixel_dimensions_are_rejected_before_decoding()
+    {
+        sqlServer.SkipIfUnavailable();
+        using var client = Client();
+        var itemId = await CreateItemAsync(client);
+        var jpeg = TestImages.Jpeg(64, 48);
+        // Alter the JPEG SOF dimensions, without allocating a giant image in the test or decoder.
+        var changed = false;
+        for (var offset = 2; offset < jpeg.Length - 8; offset++)
+        {
+            if (jpeg[offset] == 0xFF && jpeg[offset + 1] == 0xC0)
+            {
+                jpeg[offset + 5] = 0x7F;
+                jpeg[offset + 6] = 0xFF;
+                jpeg[offset + 7] = 0x7F;
+                jpeg[offset + 8] = 0xFF;
+                changed = true;
+                break;
+            }
+        }
+
+        Assert.True(changed);
+        var reservation = await ReserveAsync(client, itemId, jpeg);
+        await UploadAsync(client, reservation.UploadUrl, jpeg);
+        var response = await client.PostAsync($"/api/v1/items/{itemId}/photos/{reservation.PhotoId}/finalize", null, CancellationToken);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Contains("megapixels", await response.Content.ReadAsStringAsync(CancellationToken), StringComparison.Ordinal);
     }
 
     [Fact]
