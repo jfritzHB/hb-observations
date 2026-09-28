@@ -64,7 +64,7 @@ describe('rapid capture', () => {
       screen.getByRole('button', { name: 'Remove area Building A / Level 2 / Office 201' }),
     ).toBeInTheDocument();
     expect(where()).toHaveValue('');
-    expect(where()).toHaveAttribute('placeholder', 'Add detail, e.g. North wall');
+    expect(where()).toHaveAttribute('placeholder', 'Add location detail (optional)');
     expect(where()).toHaveAttribute('aria-expanded', 'false');
   });
 
@@ -121,6 +121,41 @@ describe('rapid capture', () => {
       screen.getByText('Building A / Level 2 / Office 201', { selector: '.location-area__path' }),
     ).toBeInTheDocument();
     expect(where()).toHaveFocus();
+  });
+
+  it('never converts typed text into a structured area, even on an exact name match', async () => {
+    const { user } = await openCapture();
+
+    await user.type(where(), 'Lobby');
+    expect(screen.getByRole('option', { name: 'Building A / Level 1 / Lobby' })).toBeInTheDocument();
+    await user.keyboard('{Enter}'); // No option was chosen, so Enter keeps the text.
+    await user.tab();
+
+    expect(document.querySelector('.location-area')).toBeNull();
+    expect(where()).toHaveValue('Lobby');
+  });
+
+  it('labels results as Replace area once an area is selected, and replaces it when one is tapped', async () => {
+    const { user } = await openCapture();
+    await user.type(where(), '201');
+    await user.click(screen.getByRole('option', { name: 'Building A / Level 2 / Office 201' }));
+
+    await user.type(where(), 'lobby');
+
+    expect(screen.queryByRole('listbox', { name: 'Matching areas' })).not.toBeInTheDocument();
+    const replace = screen.getByRole('listbox', { name: 'Replace area' });
+    expect(screen.getByText('Replace area with')).toBeVisible();
+    expect(screen.getByText(/Choosing one replaces Office 201/)).toBeInTheDocument();
+
+    await user.click(within(replace).getByRole('option', { name: 'Building A / Level 1 / Lobby' }));
+
+    expect(
+      screen.getByText('Building A / Level 1 / Lobby', { selector: '.location-area__path' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Building A / Level 2 / Office 201', { selector: '.location-area__path' }),
+    ).toBeNull();
+    expect(where()).toHaveValue('');
   });
 
   it('removes a selected area in one tap and keeps the detail', async () => {

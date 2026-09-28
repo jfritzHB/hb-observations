@@ -165,7 +165,7 @@ export function LocationField({
           aria-describedby={area ? undefined : `${inputId}-hint`}
           value={locationDetail}
           maxLength={locationDetailMaxLength}
-          placeholder={area ? 'Add detail, e.g. North wall' : 'Search area or type unit, room…'}
+          placeholder={area ? 'Add location detail (optional)' : 'Search area or type unit, room…'}
           autoComplete="off"
           enterKeyHint="done"
           onFocus={() => {
@@ -189,39 +189,47 @@ export function LocationField({
           </span>
         )}
 
-        <ul
-          id={listId}
-          role="listbox"
-          aria-label="Matching areas"
-          className="combobox__list"
-          hidden={!expanded}
-        >
-          {suggestions.map((suggestion, index) => (
-            <li
-              key={suggestion.id}
-              id={`${optionId}-${String(index)}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              className="combobox__option"
-              onMouseDown={(event) => {
-                // Keep focus in the input so the list does not close before the click lands.
-                event.preventDefault();
-              }}
-              onClick={() => {
-                chooseArea(suggestion);
-              }}
-            >
-              <LocationIcon size={18} />
-              <span>{suggestion.path}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="combobox__popup" hidden={!expanded}>
+          {area ? (
+            <p className="combobox__heading" aria-hidden="true">
+              Replace area with
+            </p>
+          ) : null}
+          <ul
+            id={listId}
+            role="listbox"
+            aria-label={area ? 'Replace area' : 'Matching areas'}
+            className="combobox__list"
+          >
+            {suggestions.map((suggestion, index) => (
+              <li
+                key={suggestion.id}
+                id={`${optionId}-${String(index)}`}
+                role="option"
+                aria-selected={index === activeIndex}
+                className="combobox__option"
+                onMouseDown={(event) => {
+                  // Keep focus in the input so the list does not close before the click lands.
+                  event.preventDefault();
+                }}
+                onClick={() => {
+                  chooseArea(suggestion);
+                }}
+              >
+                <LocationIcon size={18} />
+                <span>{suggestion.path}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       <p className="visually-hidden" role="status" aria-live="polite">
-        {expanded
-          ? `${String(suggestions.length)} matching ${suggestions.length === 1 ? 'area' : 'areas'}. Use arrow keys to choose, or keep typing to use your text as the location.`
-          : ''}
+        {!expanded
+          ? ''
+          : area
+            ? `${String(suggestions.length)} ${suggestions.length === 1 ? 'area' : 'areas'} found. Choosing one replaces ${area.name}. Keep typing to add location detail.`
+            : `${String(suggestions.length)} matching ${suggestions.length === 1 ? 'area' : 'areas'}. Use arrow keys to choose, or keep typing to use your text as the location.`}
       </p>
 
       {!expanded && visibleRecent.length > 0 ? (

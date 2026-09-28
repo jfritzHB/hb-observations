@@ -113,11 +113,25 @@ public sealed class CaptureSelectionTests
         await sheet.GetByRole(AriaRole.Button, new() { Name = "Building A / Level 2", Exact = true }).TapAsync();
         await Expect(page.Locator(".location-area")).ToContainTextAsync("Building A / Level 2");
 
+        // With an Area selected the field adds detail; project-wide results are offered only as a replacement.
+        var where = page.GetByRole(AriaRole.Combobox, new() { Name = "Where?" });
+        await Expect(where).ToHaveAttributeAsync("placeholder", "Add location detail (optional)");
+        await where.TapAsync();
+        await where.PressSequentiallyAsync("lobby");
+        var replace = page.GetByRole(AriaRole.Listbox, new() { Name = "Replace area" });
+        await Expect(replace).ToBeVisibleAsync();
+        await Expect(page.GetByText("Replace area with")).ToBeVisibleAsync();
+        await phone.AssertAccessibleAsync("Replace area results");
+        await phone.ScreenshotAsync("15-replace-area");
+        await replace.GetByRole(AriaRole.Option, new() { Name = "Building A / Level 1 / Lobby" }).TapAsync();
+        await Expect(page.Locator(".location-area")).ToContainTextAsync("Building A / Level 1 / Lobby");
+        await Expect(where).ToHaveValueAsync(string.Empty);
+
         // Next visit on this device: the location is a one-tap recent chip.
         await phone.GotoAsync($"/projects/{mosEisley}/new-item");
         var recent = page.GetByRole(AriaRole.Group, new() { Name = "Recent locations" });
-        await recent.GetByRole(AriaRole.Button, new() { Name = "Building A / Level 2", Exact = true }).TapAsync();
-        await Expect(page.Locator(".location-area")).ToContainTextAsync("Building A / Level 2");
+        await recent.GetByRole(AriaRole.Button, new() { Name = "Building A / Level 1 / Lobby", Exact = true }).TapAsync();
+        await Expect(page.Locator(".location-area")).ToContainTextAsync("Building A / Level 1 / Lobby");
     }
 
     [Fact]

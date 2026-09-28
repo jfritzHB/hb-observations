@@ -526,23 +526,37 @@ input {
   color: #5b6676;
 }
 
-.combobox__list {
+.combobox__popup {
   position: absolute;
   z-index: 5;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  margin: 0;
-  padding: 4px 0;
-  list-style: none;
   border: 2px solid var(--brand);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: 0 8px 24px rgb(11 19 32 / 25%);
+  overflow: hidden;
 }
 
-.combobox__list[hidden] {
+.combobox__popup[hidden] {
   display: none;
+}
+
+.combobox__heading {
+  margin: 0;
+  padding: 8px 14px 4px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.combobox__list {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
 }
 
 .combobox__option {
