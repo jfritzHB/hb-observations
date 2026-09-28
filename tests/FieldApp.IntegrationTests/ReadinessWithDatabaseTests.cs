@@ -10,11 +10,11 @@ public sealed class ReadinessWithDatabaseTests(SqlServerContainerFixture sqlServ
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task Ready_returns_healthy_when_database_is_reachable_and_fully_migrated()
+    public async Task Ready_returns_healthy_when_database_is_migrated_and_photo_storage_is_available()
     {
         sqlServer.SkipIfUnavailable();
 
-        await using var factory = new FieldAppFactory { AppDbConnectionString = sqlServer.SeededConnectionString! };
+        await using var factory = sqlServer.SeededFactory();
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/health/ready", CancellationToken);

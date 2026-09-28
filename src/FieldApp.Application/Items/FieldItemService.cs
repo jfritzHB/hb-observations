@@ -40,6 +40,13 @@ public sealed class FieldItemService(
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // Visibility and permission first (docs/07): an invisible project is 404 whatever the request looks like.
+        var authorization = await projectAuthorizer.AuthorizeAsync(projectId, ProjectOperation.CaptureItems, cancellationToken);
+        if (!authorization.IsGranted)
+        {
+            return authorization.Error!;
+        }
+
         if (!IdempotencyRecord.IsValidKey(idempotencyKey))
         {
             return AppError.Validation("Idempotency-Key", $"An Idempotency-Key header of 1-{IdempotencyRecord.KeyMaxLength} visible characters is required.");
@@ -53,12 +60,6 @@ public sealed class FieldItemService(
         if (request.Type is null)
         {
             return AppError.Validation("type", "type is required (Observation or PunchList).");
-        }
-
-        var authorization = await projectAuthorizer.AuthorizeAsync(projectId, ProjectOperation.CaptureItems, cancellationToken);
-        if (!authorization.IsGranted)
-        {
-            return authorization.Error!;
         }
 
         var userId = currentUser.RequireUserId();

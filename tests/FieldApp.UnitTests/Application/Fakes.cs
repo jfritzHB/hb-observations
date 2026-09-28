@@ -1,9 +1,12 @@
 using FieldApp.Application.Abstractions;
 using FieldApp.Application.Authorization;
 using FieldApp.Application.Common;
+using FieldApp.Application.Items;
 using FieldApp.Application.ReferenceData;
 using FieldApp.Domain.Areas;
 using FieldApp.Domain.Audit;
+using FieldApp.Domain.Common;
+using FieldApp.Domain.FieldItems;
 using FieldApp.Domain.Memberships;
 using FieldApp.Domain.Projects;
 using FieldApp.Domain.Users;
@@ -21,7 +24,7 @@ internal sealed class FakeCorrelation : ICorrelationContext
 }
 
 /// <summary>In-memory stand-in for the persistence ports used by the reference-data use cases.</summary>
-internal sealed class InMemoryReferenceData : IReferenceDataReader, IProjectMembershipReader, IAreaStore, IAuditLog, IUnitOfWork
+internal sealed class InMemoryReferenceData : IReferenceDataReader, IProjectMembershipReader, IAreaStore, IAuditLog, IUnitOfWork, IFieldItemStore
 {
     public List<Project> Projects { get; } = [];
 
@@ -32,6 +35,14 @@ internal sealed class InMemoryReferenceData : IReferenceDataReader, IProjectMemb
     public List<ProjectTradeMapping> ProjectTrades { get; } = [];
 
     public List<AuditEvent> AuditEvents { get; } = [];
+
+    public List<FieldItem> Items { get; } = [];
+
+    public List<IdempotencyRecord> IdempotencyRecords { get; } = [];
+
+    private List<FieldItem> PendingItems { get; } = [];
+
+    private List<IdempotencyRecord> PendingRecords { get; } = [];
 
     public bool FailNextSaveWithDuplicateKey { get; set; }
 
@@ -67,6 +78,19 @@ internal sealed class InMemoryReferenceData : IReferenceDataReader, IProjectMemb
 
     public void Add(AuditEvent auditEvent) => PendingAudit.Add(auditEvent);
 
+    public void Add(FieldItem item) => PendingItems.Add(item);
+
+    public void Add(IdempotencyRecord record) => PendingRecords.Add(record);
+
+    public Task<FieldItem?> FindAsync(Guid itemId, CancellationToken cancellationToken) =>
+        Task.FromResult(Items.SingleOrDefault(item => item.Id == itemId));
+
+    public Task<FieldItem?> FindByClientDraftAsync(Guid projectId, Guid createdByUserId, Guid clientDraftId, CancellationToken cancellationToken) =>
+        Task.FromResult(Items.SingleOrDefault(item => item.ProjectId == projectId && item.CreatedByUserId == createdByUserId && item.ClientDraftId == clientDraftId));
+
+    public Task<IdempotencyRecord?> FindIdempotencyRecordAsync(Guid userId, string scope, string key, CancellationToken cancellationToken) =>
+        Task.FromResult(IdempotencyRecords.SingleOrDefault(record => record.UserId == userId && record.Scope == scope && record.Key == key));
+
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         if (FailNextSaveWithDuplicateKey)
@@ -74,13 +98,19 @@ internal sealed class InMemoryReferenceData : IReferenceDataReader, IProjectMemb
             FailNextSaveWithDuplicateKey = false;
             PendingAreas.Clear();
             PendingAudit.Clear();
+            PendingItems.Clear();
+            PendingRecords.Clear();
             throw new DuplicateKeyException("duplicate");
         }
 
         Areas.AddRange(PendingAreas);
         AuditEvents.AddRange(PendingAudit);
+        Items.AddRange(PendingItems);
+        IdempotencyRecords.AddRange(PendingRecords);
         PendingAreas.Clear();
         PendingAudit.Clear();
+        PendingItems.Clear();
+        PendingRecords.Clear();
         SaveCount++;
         return Task.CompletedTask;
     }

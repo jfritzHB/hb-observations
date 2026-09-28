@@ -24,6 +24,11 @@ public sealed class FieldAppFactory : WebApplicationFactory<Program>
 
     public string AppDbConnectionString { get; init; } = string.Empty;
 
+    /// <summary>Azurite (or other Blob Storage) connection string; empty means photo storage is not configured.</summary>
+    public string PhotoStorageConnectionString { get; init; } = string.Empty;
+
+    public string PhotoContainer { get; init; } = "field-item-photos";
+
     public string EnvironmentName { get; init; } = "Development";
 
     public IReadOnlyDictionary<string, string?> Settings { get; init; } = new Dictionary<string, string?>();
@@ -51,6 +56,8 @@ public sealed class FieldAppFactory : WebApplicationFactory<Program>
             configuration.AddInMemoryCollection(new Dictionary<string, string?>(Settings)
             {
                 ["ConnectionStrings:AppDb"] = AppDbConnectionString,
+                ["ConnectionStrings:PhotoStorage"] = PhotoStorageConnectionString,
+                ["Azure:PhotoContainer"] = PhotoContainer,
             }));
     }
 

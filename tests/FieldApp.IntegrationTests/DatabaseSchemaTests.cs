@@ -1,4 +1,5 @@
 using FieldApp.Domain.Areas;
+using FieldApp.Domain.FieldItems;
 using FieldApp.Domain.Projects;
 using FieldApp.Infrastructure.Persistence;
 using FieldApp.Infrastructure.Seeding;
@@ -148,6 +149,104 @@ public sealed class DatabaseSchemaTests(SqlServerContainerFixture sqlServer)
 
         secondCopy.Deactivate();
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync(CancellationToken));
+    }
+
+    [Fact]
+    public async Task Field_item_constraints_hold_at_the_database_level()
+    {
+        sqlServer.SkipIfUnavailable();
+        var connectionString = await sqlServer.CreateMigratedDatabaseAsync(
+            SqlServerContainerFixture.UniqueDatabaseName("ItemConstraints"), seedDemoData: true, CancellationToken);
+        var draftId = Guid.NewGuid();
+
+        await using (var db = CreateContext(connectionString))
+        {
+            db.FieldItems.Add(await NewDraftAsync(db, draftId));
+            await db.SaveChangesAsync(CancellationToken);
+        }
+
+        // One item per creator + clientDraftId.
+        await using (var db = CreateContext(connectionString))
+        {
+            db.FieldItems.Add(await NewDraftAsync(db, draftId));
+            await AssertSqlErrorAsync(db, 2601);
+        }
+
+        // An item's Area must be in the item's project (composite foreign key).
+        var error = await ExecuteExpectingSqlErrorAsync(
+            connectionString,
+            "UPDATE FieldItems SET AreaId = @area WHERE ClientDraftId = @draft",
+            ("@area", AreaId(ProjectNumbers.Anchorhead, "Headworks")),
+            ("@draft", draftId));
+        Assert.Equal(547, error.Number);
+    }
+
+    [Fact]
+    public async Task At_most_one_active_primary_photo_exists_per_item()
+    {
+        sqlServer.SkipIfUnavailable();
+        var connectionString = await sqlServer.CreateMigratedDatabaseAsync(
+            SqlServerContainerFixture.UniqueDatabaseName("OnePrimary"), seedDemoData: true, CancellationToken);
+        Guid itemId;
+
+        await using (var db = CreateContext(connectionString))
+        {
+            var item = await NewDraftAsync(db, Guid.NewGuid());
+            item.ReservePrimaryPhoto(Guid.NewGuid(), "image/jpeg", 100, TestImages.Sha256([1]), null, UserId(PersonaKeys.Superintendent), DateTimeOffset.UtcNow, TimeSpan.FromMinutes(15));
+            db.FieldItems.Add(item);
+            await db.SaveChangesAsync(CancellationToken);
+            itemId = item.Id;
+        }
+
+        var error = await ExecuteExpectingSqlErrorAsync(
+            connectionString,
+            """
+            INSERT INTO FieldItemPhotos (Id, FieldItemId, Status, BlobKey, MediaType, ByteLength, Sha256, SortOrder, ReservedAt, ReservationExpiresAt, UploadedByUserId, IsPrimary)
+            VALUES (NEWID(), @item, 'Reserved', CONVERT(nvarchar(36), NEWID()), 'image/jpeg', 100, REPLICATE('A', 43) + '=', 1, SYSUTCDATETIME(), SYSUTCDATETIME(), @user, 1)
+            """,
+            ("@item", itemId),
+            ("@user", UserId(PersonaKeys.Superintendent)));
+
+        Assert.Equal(2601, error.Number);
+    }
+
+    [Fact]
+    public async Task Concurrent_changes_to_the_same_item_are_detected_by_rowversion()
+    {
+        sqlServer.SkipIfUnavailable();
+        var connectionString = await sqlServer.CreateMigratedDatabaseAsync(
+            SqlServerContainerFixture.UniqueDatabaseName("ItemConcurrency"), seedDemoData: true, CancellationToken);
+        Guid itemId;
+        await using (var db = CreateContext(connectionString))
+        {
+            var item = await NewDraftAsync(db, Guid.NewGuid());
+            db.FieldItems.Add(item);
+            await db.SaveChangesAsync(CancellationToken);
+            itemId = item.Id;
+        }
+
+        await using var first = CreateContext(connectionString);
+        await using var second = CreateContext(connectionString);
+        var firstCopy = await first.FieldItems.Include(i => i.Photos).SingleAsync(i => i.Id == itemId, CancellationToken);
+        var secondCopy = await second.FieldItems.Include(i => i.Photos).SingleAsync(i => i.Id == itemId, CancellationToken);
+        var user = UserId(PersonaKeys.Superintendent);
+
+        firstCopy.ReservePrimaryPhoto(Guid.NewGuid(), "image/jpeg", 100, TestImages.Sha256([1]), null, user, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(15));
+        await first.SaveChangesAsync(CancellationToken);
+        secondCopy.ReservePrimaryPhoto(Guid.NewGuid(), "image/jpeg", 200, TestImages.Sha256([2]), null, user, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(15));
+
+        await Assert.ThrowsAnyAsync<DbUpdateException>(() => second.SaveChangesAsync(CancellationToken));
+    }
+
+    private static async Task<FieldItem> NewDraftAsync(FieldAppDbContext db, Guid clientDraftId)
+    {
+        var projectId = ProjectId(ProjectNumbers.MosEisley);
+        var projectTrade = await db.ProjectTrades.AsNoTracking().SingleAsync(pt => pt.ProjectId == projectId && pt.TradeId == TradeId("DRY"), CancellationToken);
+        var trade = await db.Trades.AsNoTracking().SingleAsync(t => t.Id == projectTrade.TradeId, CancellationToken);
+        var company = await db.Companies.AsNoTracking().SingleAsync(c => c.Id == projectTrade.ResponsibleCompanyId, CancellationToken);
+        return FieldItem.CreateDraft(
+            Guid.NewGuid(), projectId, clientDraftId, FieldItemType.PunchList, null, "Unit 214", projectTrade, trade, company,
+            ItemPriority.Normal, UserId(PersonaKeys.Superintendent), DateTimeOffset.UtcNow);
     }
 
     private static FieldAppDbContext CreateContext(string connectionString) =>
