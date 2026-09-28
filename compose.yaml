@@ -9,11 +9,23 @@ services:
       - "8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__AppDb: Server=sql,1433;Database=FieldApp;User Id=sa;Password=${FIELDAPP_SQL_PASSWORD};Encrypt=True;TrustServerCertificate=True
+      ConnectionStrings__AppDb: Server=sql,1433;Database=FieldApp;User Id=sa;Password=${FIELDAPP_SQL_PASSWORD:?Set FIELDAPP_SQL_PASSWORD in .env - see README};Encrypt=True;TrustServerCertificate=True
       Azure__StorageAccountUrl: ${FIELDAPP_STORAGE_ACCOUNT_URL:-}
       Azure__PhotoContainer: ${FIELDAPP_PHOTO_CONTAINER:-field-item-photos}
       AzureOpenAI__Endpoint: ${FIELDAPP_AZURE_OPENAI_ENDPOINT:-}
       AzureOpenAI__DeploymentName: ${FIELDAPP_AZURE_OPENAI_DEPLOYMENT:-}
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+
+  # Local only: creates the empty application database so /health/ready can pass. Idempotent.
+  # Schema changes are applied by a separate, controlled migration step (docs/03-architecture.md), never by app startup.
+  sql-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    entrypoint: ["/opt/mssql-tools18/bin/sqlcmd", "-S", "sql,1433", "-U", "sa", "-C", "-b", "-Q", "IF DB_ID(N'FieldApp') IS NULL CREATE DATABASE [FieldApp];"]
+    environment:
+      SQLCMDPASSWORD: ${FIELDAPP_SQL_PASSWORD:?Set FIELDAPP_SQL_PASSWORD in .env - see README}
+    restart: "no"
     depends_on:
       sql:
         condition: service_healthy
@@ -23,7 +35,7 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: ${FIELDAPP_SQL_PASSWORD}
+      MSSQL_SA_PASSWORD: ${FIELDAPP_SQL_PASSWORD:?Set FIELDAPP_SQL_PASSWORD in .env - see README}
     ports:
       - "14333:1433"
     volumes:
