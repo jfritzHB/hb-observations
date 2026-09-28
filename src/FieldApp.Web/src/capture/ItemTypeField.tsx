@@ -6,18 +6,13 @@ interface ItemTypeFieldProps {
   onChange: (value: ItemType) => void;
 }
 
-/** Two large segmented choices. Native radios give arrow-key and screen-reader behaviour for free. */
+/** Two large, equally prominent choices. Native radios give arrow-key and screen-reader behaviour for free. */
 export function ItemTypeField({ value, onChange }: ItemTypeFieldProps) {
   const name = useId();
 
   return (
-    <fieldset className="capture-step segmented">
-      <legend className="capture-step__label">
-        <span className="capture-step__number" aria-hidden="true">
-          4
-        </span>
-        Type
-      </legend>
+    <fieldset className="capture-field segmented">
+      <legend className="visually-hidden">Item type</legend>
       <div className="segmented__options">
         {(Object.keys(itemTypeLabels) as ItemType[]).map((type) => (
           <label key={type} className="segmented__option">

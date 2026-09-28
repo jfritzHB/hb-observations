@@ -137,17 +137,17 @@ docker compose run --rm migrate                                # apply to the lo
 
 `/health/ready` reports unhealthy until every migration in the running build has been applied.
 
-### Manually testing Slice 1
+### Manually testing capture (Slices 1 and 1.1)
 
 1. `docker compose up --build`, then open <http://localhost:8080> (use the browser's device toolbar at 360px wide, or a phone on the same network).
 2. Choose **Owen Lars (Superintendent)**. Projects shows HB-TEST-001 and HB-TEST-002 only.
 3. Open **Mos Eisley Municipal Center** and tap **New Item**.
-4. Tap **Choose area** and tap **Building A / Level 2 / Office 201** (search is optional).
-5. Tap **Drywall**. **Responsible company: Dune Sea Drywall Co.** appears immediately; there is no company picker.
-6. Tap **Punch List**. The Selections summary shows Area, Trade, Responsible company and Type above the camera. **Take photo** is a disabled boundary (photo capture arrives in Slice 2).
+4. In **Where?** type `201` and tap **Building A / Level 2 / Office 201**; then type `North wall` as extra location detail. (Or type `Unit 214` alone: free-text location detail never creates an Area. **Browse areas** chooses without typing.)
+5. Tap **Drywall**. **Responsible: Dune Sea Drywall Co.** appears immediately; there is no company picker.
+6. Tap **Punch List**. **Take photo** (docked above the navigation) turns prominent but stays a disabled boundary; photo capture arrives in Slice 2.
 7. Authorization boundary: **More → Beru Whitesun (Project Manager)** now shows only HB-TEST-001. Opening an HB-TEST-002 URL shows "Project not found". `curl -i -H "X-Dev-Persona: superintendent" -X POST -H "Content-Type: application/json" -d '{"name":"Roof"}' http://localhost:8080/api/v1/projects/<HB-TEST-001 id>/areas` returns 403, and the same call for HB-TEST-003 returns 404.
 
-Recent areas and trades are remembered on the device per user and project (browser storage), because server-side recency needs captured items, which later slices add.
+Recent locations (area and/or detail) and trades are remembered on the device per user and project (browser storage), because server-side recency needs captured items, which later slices add.
 
 ### Checks (the same ones CI runs)
 

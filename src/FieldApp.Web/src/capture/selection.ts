@@ -17,15 +17,43 @@ export function matchesSearch(area: Area, query: string): boolean {
     .every((term) => path.includes(term));
 }
 
-const quickTradeLimit = 6;
-const recentTradeLimit = 4;
+/** Five trade chips plus More fill a 3 x 2 grid at phone width. */
+export const quickTradeCount = 5;
 
-/** Large chips: recent trades (or, before any history, the first few), always including the selected one. */
+/**
+ * Quick trade chips: recently used first, topped up with the remaining trades in list order, always including
+ * the selected trade. Stable order keeps muscle memory during repeat capture.
+ */
 export function quickTrades(
   trades: CaptureTrade[],
   recent: CaptureTrade[],
   selected: CaptureTrade | null,
 ): CaptureTrade[] {
-  const base = recent.length > 0 ? recent.slice(0, recentTradeLimit) : trades.slice(0, quickTradeLimit);
-  return selected && !base.some((trade) => trade.tradeId === selected.tradeId) ? [selected, ...base] : base;
+  const ordered = [...recent, ...trades];
+  const unique = ordered.filter(
+    (trade, index) => ordered.findIndex((other) => other.tradeId === trade.tradeId) === index,
+  );
+  const chips = unique.slice(0, quickTradeCount);
+
+  if (selected && !chips.some((trade) => trade.tradeId === selected.tradeId)) {
+    chips[chips.length - 1] = selected;
+  }
+
+  return chips;
+}
+
+/** A location choice: a structured Area, a free-text Location Detail, or both. */
+export interface LocationChoice {
+  area: Area | null;
+  locationDetail: string;
+}
+
+/** Short chip text, e.g. "Office 201 · North wall" or "Unit 214". */
+export function locationLabel({ area, locationDetail }: LocationChoice): string {
+  return [area?.name, locationDetail.trim()].filter(Boolean).join(' · ');
+}
+
+/** Full accessible name, e.g. "Building A / Level 2 / Office 201, North wall". */
+export function locationAccessibleName({ area, locationDetail }: LocationChoice): string {
+  return [area?.path, locationDetail.trim()].filter(Boolean).join(', ');
 }

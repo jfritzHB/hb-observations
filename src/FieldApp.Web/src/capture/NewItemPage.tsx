@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
 import { isApiError } from '../api/client';
 import type { Area, CaptureTrade, Project } from '../api/types';
 import { useApiGet, type Loadable } from '../api/useApiGet';
@@ -7,15 +7,23 @@ import { CameraIcon } from '../components/icons';
 import { ErrorMessage, Loading } from '../components/StatusMessage';
 import { ProjectNotFound } from '../pages/ProjectNotFound';
 import { useCurrentUser } from '../session/session';
-import { AreaField } from './AreaField';
+import { initialCaptureContext, isReadyForPhoto, type CaptureContext } from './captureContext';
 import { ItemTypeField } from './ItemTypeField';
-import { pickRecent, readRecent, recordRecent, writeLastProjectId } from './recent';
-import { itemTypeLabels, type ItemType } from './selection';
+import { LocationField } from './LocationField';
+import {
+  decodeLocation,
+  encodeLocation,
+  pickRecent,
+  readRecent,
+  recordRecent,
+  writeLastProjectId,
+} from './recent';
+import type { LocationChoice } from './selection';
 import { TradeField } from './TradeField';
 
 /**
- * Capture selection (docs/02-mobile-ux.md): Project, Area, Trade, Type, then the camera. No typing is needed.
- * The camera is the Slice 2 boundary and is deliberately not available yet.
+ * Rapid capture (docs/02-mobile-ux.md, Slice 1.1): where, trade, type, then the photo. The camera is the Slice 2
+ * boundary and is deliberately not available yet.
  */
 export function NewItemPage() {
   const { projectId = '' } = useParams();
@@ -55,12 +63,10 @@ export function NewItemPage() {
     );
   }
 
-  return (
-    <CaptureSelection project={project.result.data} areas={areas.result.data} trades={trades.result.data} />
-  );
+  return <RapidCapture project={project.result.data} areas={areas.result.data} trades={trades.result.data} />;
 }
 
-function CaptureSelection({
+function RapidCapture({
   project,
   areas,
   trades,
@@ -70,111 +76,118 @@ function CaptureSelection({
   trades: CaptureTrade[];
 }) {
   const user = useCurrentUser();
-  const [areaId, setAreaId] = useState<string | null>(null);
-  const [tradeId, setTradeId] = useState<string | null>(null);
-  const [itemType, setItemType] = useState<ItemType | null>(null);
-  const [recentAreaIds, setRecentAreaIds] = useState(() => readRecent(user.id, project.id, 'areas'));
-  const [recentTradeIds, setRecentTradeIds] = useState(() => readRecent(user.id, project.id, 'trades'));
-  const summaryId = useId();
+  const routeState: unknown = useLocation().state;
+  const [context, setContext] = useState<CaptureContext>(() => initialCaptureContext(routeState));
+  // Recents are read once per capture screen so chips never reorder under the user's thumb mid-capture;
+  // new choices are still recorded and appear on the next capture.
+  const [recentLocationKeys] = useState(() => readRecent(user.id, project.id, 'locations'));
+  const [recentTradeIds] = useState(() => readRecent(user.id, project.id, 'trades'));
   const cameraNoteId = useId();
 
   useEffect(() => {
     writeLastProjectId(user.id, project.id);
   }, [user.id, project.id]);
 
-  const area = areas.find((candidate) => candidate.id === areaId) ?? null;
-  const trade = trades.find((candidate) => candidate.tradeId === tradeId) ?? null;
-  const ready = area !== null && trade !== null && itemType !== null;
+  const areaById = new Map(areas.map((area) => [area.id, area]));
+  const area = context.areaId ? (areaById.get(context.areaId) ?? null) : null;
+  const trade = trades.find((candidate) => candidate.tradeId === context.tradeId) ?? null;
+  const ready = isReadyForPhoto(context);
+  const hasAnySelection =
+    context.areaId !== null || context.locationDetail !== '' || trade !== null || context.itemType !== null;
+
+  // Recent locations whose Area (if any) is still selectable.
+  const recentLocations: LocationChoice[] = recentLocationKeys
+    .flatMap((key) => decodeLocation(key) ?? [])
+    .flatMap((location) => {
+      const recentArea = location.areaId ? areaById.get(location.areaId) : null;
+      return recentArea === undefined ? [] : [{ area: recentArea, locationDetail: location.locationDetail }];
+    })
+    .slice(0, 3);
 
   return (
     <main className="page capture">
-      <h1>New item</h1>
-
-      <section className="capture-step capture-step--project" aria-label="Project">
-        <span className="capture-step__number" aria-hidden="true">
-          1
+      <div className="context-bar">
+        <span className="context-bar__project">
+          <span className="context-bar__name">{project.name}</span>
+          <span className="context-bar__number">{project.number}</span>
         </span>
-        <span className="capture-project">
-          <span className="capture-project__name">{project.name}</span>
-          <span className="card__meta">{project.number}</span>
-        </span>
-        <Link className="text-button" to="/projects" aria-label={`Change project (current: ${project.name})`}>
+        <Link
+          className="text-button text-button--small"
+          to="/projects"
+          aria-label={`Change project (current: ${project.name})`}
+        >
           Change
         </Link>
-      </section>
+      </div>
 
-      <AreaField
+      <div className="capture-title-row">
+        <h1 className="capture-title">New item</h1>
+        {hasAnySelection ? (
+          <button
+            type="button"
+            className="text-button text-button--small"
+            onClick={() => {
+              setContext({ areaId: null, locationDetail: '', tradeId: null, itemType: null });
+            }}
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+
+      <LocationField
         areas={areas}
-        recent={pickRecent(recentAreaIds, areas, (candidate) => candidate.id, 3)}
-        selected={area}
-        onSelect={(selected) => {
-          setAreaId(selected.id);
-          setRecentAreaIds(recordRecent(user.id, project.id, 'areas', selected.id));
+        area={area}
+        locationDetail={context.locationDetail}
+        recent={area || context.locationDetail.trim() ? [] : recentLocations}
+        onChange={(choice) => {
+          setContext((current) => ({
+            ...current,
+            areaId: choice.area?.id ?? null,
+            locationDetail: choice.locationDetail,
+          }));
+        }}
+        onCommit={(choice) => {
+          recordRecent(
+            user.id,
+            project.id,
+            'locations',
+            encodeLocation({ areaId: choice.area?.id ?? null, locationDetail: choice.locationDetail }),
+          );
         }}
       />
 
       <TradeField
         trades={trades}
-        recent={pickRecent(recentTradeIds, trades, (candidate) => candidate.tradeId, 4)}
+        recent={pickRecent(recentTradeIds, trades, (candidate) => candidate.tradeId, 5)}
         selected={trade}
         onSelect={(selected) => {
-          setTradeId(selected.tradeId);
-          setRecentTradeIds(recordRecent(user.id, project.id, 'trades', selected.tradeId));
+          setContext((current) => ({ ...current, tradeId: selected.tradeId }));
+          recordRecent(user.id, project.id, 'trades', selected.tradeId);
         }}
       />
 
-      <ItemTypeField value={itemType} onChange={setItemType} />
+      <ItemTypeField
+        value={context.itemType}
+        onChange={(itemType) => {
+          setContext((current) => ({ ...current, itemType }));
+        }}
+      />
 
-      <section className="summary" aria-labelledby={summaryId}>
-        <div className="summary__header">
-          <h2 id={summaryId} className="summary__title">
-            Selections
-          </h2>
-          {area || trade || itemType ? (
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => {
-                setAreaId(null);
-                setTradeId(null);
-                setItemType(null);
-              }}
-            >
-              Clear all
-            </button>
-          ) : null}
-        </div>
-        <dl className="summary__list">
-          <SummaryRow term="Area" value={area?.path} />
-          <SummaryRow term="Trade" value={trade?.name} />
-          <SummaryRow term="Responsible company" value={trade?.responsibleCompany.name} />
-          <SummaryRow term="Type" value={itemType ? itemTypeLabels[itemType] : undefined} />
-        </dl>
-      </section>
-
-      <div className="capture-step capture-step--camera">
-        <button type="button" className="camera-button" aria-disabled="true" aria-describedby={cameraNoteId}>
-          <span className="capture-step__number capture-step__number--inverse" aria-hidden="true">
-            5
-          </span>
-          <CameraIcon size={32} />
+      <div className="capture-dock">
+        <button
+          type="button"
+          className={`camera-button${ready ? ' camera-button--ready' : ''}`}
+          aria-disabled="true"
+          aria-describedby={cameraNoteId}
+        >
+          <CameraIcon size={28} />
           Take photo
         </button>
-        <p id={cameraNoteId} className={`camera-note${ready ? ' camera-note--ready' : ''}`} role="status">
-          {ready
-            ? 'Selections complete. Photo capture is not available yet; it arrives in the next release.'
-            : 'Choose an area, trade and type first.'}
+        <p id={cameraNoteId} className="camera-note">
+          {ready ? 'Photo capture arrives in the next release' : 'Set where, trade and type'}
         </p>
       </div>
     </main>
-  );
-}
-
-function SummaryRow({ term, value }: { term: string; value: string | undefined }) {
-  return (
-    <div className="summary__row">
-      <dt>{term}</dt>
-      <dd className={value ? undefined : 'summary__missing'}>{value ?? 'Not selected'}</dd>
-    </div>
   );
 }

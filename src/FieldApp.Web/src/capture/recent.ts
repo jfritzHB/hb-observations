@@ -5,7 +5,7 @@ import { readJson, readStorage, writeStorage } from '../lib/storage';
 
 const maxRecent = 5;
 
-export type RecentKind = 'areas' | 'trades';
+export type RecentKind = 'trades' | 'locations';
 
 function key(userId: string, projectId: string, kind: RecentKind): string {
   return `fieldapp.recent.v1.${userId}.${projectId}.${kind}`;
@@ -35,6 +35,34 @@ export function pickRecent<T>(
 ): T[] {
   const byId = new Map(items.map((item) => [idOf(item), item]));
   return recentIds.flatMap((id) => byId.get(id) ?? []).slice(0, limit);
+}
+
+/** A recently used location: a structured Area, a Location Detail, or both. */
+export interface RecentLocation {
+  areaId: string | null;
+  locationDetail: string;
+}
+
+export function encodeLocation(location: RecentLocation): string {
+  return JSON.stringify([location.areaId, location.locationDetail.trim()]);
+}
+
+export function decodeLocation(value: string): RecentLocation | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === 2 &&
+      (parsed[0] === null || typeof parsed[0] === 'string') &&
+      typeof parsed[1] === 'string'
+    ) {
+      return { areaId: parsed[0] as string | null, locationDetail: parsed[1] };
+    }
+  } catch {
+    // Ignore malformed entries.
+  }
+
+  return null;
 }
 
 const lastProjectKey = (userId: string) => `fieldapp.lastProject.v1.${userId}`;

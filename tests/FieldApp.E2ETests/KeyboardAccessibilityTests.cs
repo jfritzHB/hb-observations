@@ -3,44 +3,48 @@ using static Microsoft.Playwright.Assertions;
 
 namespace FieldApp.E2ETests;
 
-/// <summary>The capture selection works from a keyboard, with a clearly visible focus indicator.</summary>
+/// <summary>The rapid-capture screen works from a keyboard, with visible, unobscured focus.</summary>
 public sealed class KeyboardAccessibilityTests
 {
     [Fact]
-    public async Task Capture_selection_is_operable_by_keyboard_with_visible_focus()
+    public async Task Rapid_capture_is_operable_by_keyboard_with_visible_unobscured_focus()
     {
         await using var phone = await PhoneSession.StartAsync("superintendent");
         var page = phone.Page;
         var mosEisley = await phone.ProjectIdAsync("HB-TEST-001");
         await phone.GotoAsync($"/projects/{mosEisley}/new-item");
-        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Choose area" })).ToBeVisibleAsync();
 
-        // Tab to the area control: it must show a visible focus ring.
-        var areaButton = page.GetByRole(AriaRole.Button, new() { Name = "Choose area" });
-        await TabUntilFocusedAsync(page, areaButton);
-        await AssertVisibleFocusAsync(page, "Area button");
+        // Location combobox: type, arrow through results, Escape closes, Enter selects.
+        var where = page.GetByRole(AriaRole.Combobox, new() { Name = "Where?" });
+        await TabUntilFocusedAsync(page, where);
+        await AssertVisibleFocusAsync(page, "Where? combobox");
+        await page.Keyboard.TypeAsync("office");
+        await Expect(where).ToHaveAttributeAsync("aria-expanded", "true");
+        await page.Keyboard.PressAsync("ArrowDown");
+        await page.Keyboard.PressAsync("ArrowDown");
+        var office202 = page.GetByRole(AriaRole.Option, new() { Name = "Building A / Level 2 / Office 202" });
+        await Expect(office202).ToHaveAttributeAsync("aria-selected", "true");
+        await Expect(where).ToHaveAttributeAsync("aria-activedescendant", await office202.GetAttributeAsync("id") ?? "missing");
+        await phone.AssertAccessibleAsync("Combobox with active option");
 
-        // Enter opens the sheet with focus inside; Escape closes it and returns focus to the trigger.
-        await page.Keyboard.PressAsync("Enter");
-        var sheet = page.GetByRole(AriaRole.Dialog, new() { Name = "Choose area" });
-        await Expect(sheet).ToBeVisibleAsync();
-        Assert.True(await sheet.EvaluateAsync<bool>("dialog => dialog.contains(document.activeElement)"), "Focus should move into the sheet.");
         await page.Keyboard.PressAsync("Escape");
-        await Expect(sheet).ToBeHiddenAsync();
-        await Expect(areaButton).ToBeFocusedAsync();
+        await Expect(where).ToHaveAttributeAsync("aria-expanded", "false");
+        await Expect(where).ToHaveValueAsync("office");
 
-        // Choose an area from the keyboard.
+        await page.Keyboard.PressAsync("ArrowDown");
         await page.Keyboard.PressAsync("Enter");
-        var office = sheet.GetByRole(AriaRole.Button, new() { Name = "Building A / Level 2 / Office 201", Exact = true });
-        await TabUntilFocusedAsync(page, office);
-        await AssertVisibleFocusAsync(page, "Area option");
-        await page.Keyboard.PressAsync("Enter");
-        await Expect(sheet).ToBeHiddenAsync();
+        await Expect(page.Locator(".location-area")).ToContainTextAsync("Building A / Level 2 / Office 201");
+        await Expect(where).ToBeFocusedAsync();
 
-        // Trade chip via Space.
+        // Detail typed after the Area is kept.
+        await page.Keyboard.TypeAsync("North wall");
+        await Expect(where).ToHaveValueAsync("North wall");
+
+        // Trade chip via Space; focus must not hide under the docked camera or bottom navigation.
         var drywall = page.GetByRole(AriaRole.Button, new() { Name = "Drywall", Exact = true });
         await TabUntilFocusedAsync(page, drywall);
         await AssertVisibleFocusAsync(page, "Trade chip");
+        await PhoneSession.AssertNotObscuredAsync(drywall, "Focused trade chip");
         await page.Keyboard.PressAsync("Space");
         await Expect(drywall).ToHaveAttributeAsync("aria-pressed", "true");
 
@@ -50,9 +54,10 @@ public sealed class KeyboardAccessibilityTests
         await page.Keyboard.PressAsync("Space");
         await AssertVisibleFocusAsync(page, "Type option", viaParentLabel: true);
         await page.Keyboard.PressAsync("ArrowRight");
-        await Expect(page.GetByRole(AriaRole.Radio, new() { Name = "Punch List" })).ToBeCheckedAsync();
+        var punchList = page.GetByRole(AriaRole.Radio, new() { Name = "Punch List" });
+        await Expect(punchList).ToBeCheckedAsync();
+        await PhoneSession.AssertNotObscuredAsync(page.Locator("label.segmented__option").Last, "Focused type option");
 
-        await Expect(page.GetByRole(AriaRole.Region, new() { Name = "Selections" })).ToContainTextAsync("Dune Sea Drywall Co.");
         await phone.AssertAccessibleAsync("Keyboard flow end state");
     }
 

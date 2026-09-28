@@ -13,20 +13,20 @@ interface TradeFieldProps {
   onSelect: (trade: CaptureTrade) => void;
 }
 
+/** Large chips for recent/common trades plus More. The Responsible Company is derived, never chosen. */
 export function TradeField({ trades, recent, selected, onSelect }: TradeFieldProps) {
   const [open, setOpen] = useState(false);
-  const headingId = useId();
+  const labelId = useId();
 
   const chips = quickTrades(trades, recent, selected);
 
   return (
-    <section className="capture-step" aria-labelledby={headingId}>
-      <h2 id={headingId} className="capture-step__label">
-        <span className="capture-step__number" aria-hidden="true">
-          3
+    <div className="capture-field">
+      <div className="capture-field__label-row">
+        <span id={labelId} className="capture-field__label">
+          Trade
         </span>
-        Trade
-      </h2>
+      </div>
 
       {trades.length === 0 ? (
         <Notice>
@@ -37,7 +37,7 @@ export function TradeField({ trades, recent, selected, onSelect }: TradeFieldPro
         </Notice>
       ) : (
         <>
-          <div className="chip-grid" role="group" aria-labelledby={headingId}>
+          <div className="trade-grid" role="group" aria-labelledby={labelId}>
             {chips.map((trade) => {
               const isSelected = selected?.tradeId === trade.tradeId;
               return (
@@ -50,39 +50,38 @@ export function TradeField({ trades, recent, selected, onSelect }: TradeFieldPro
                     onSelect(trade);
                   }}
                 >
-                  {isSelected ? <CheckIcon size={20} /> : null}
+                  {isSelected ? <CheckIcon size={18} /> : null}
                   {trade.name}
                 </button>
               );
             })}
-            <button
-              type="button"
-              className="chip chip--outline"
-              aria-haspopup="dialog"
-              onClick={() => {
-                setOpen(true);
-              }}
-            >
-              View all trades ({trades.length})
-            </button>
+            {trades.length > chips.length ? (
+              <button
+                type="button"
+                className="chip chip--outline"
+                aria-haspopup="dialog"
+                aria-label={`More trades (${String(trades.length)} total)`}
+                onClick={() => {
+                  setOpen(true);
+                }}
+              >
+                More
+              </button>
+            ) : null}
           </div>
 
-          <p className="responsible" aria-live="polite">
-            {selected ? (
-              <>
-                <span className="responsible__label">Responsible company</span>
-                <span className="responsible__value">{selected.responsibleCompany.name}</span>
-              </>
-            ) : (
-              <span className="field-hint">The responsible company is filled in from the trade.</span>
-            )}
-          </p>
+          {selected ? (
+            <p className="responsible" aria-live="polite">
+              <span className="responsible__label">Responsible:</span>{' '}
+              <span className="responsible__value">{selected.responsibleCompany.name}</span>
+            </p>
+          ) : null}
         </>
       )}
 
       <Sheet
         open={open}
-        title="Choose trade"
+        title="All trades"
         onClose={() => {
           setOpen(false);
         }}
@@ -108,6 +107,6 @@ export function TradeField({ trades, recent, selected, onSelect }: TradeFieldPro
           ))}
         </ul>
       </Sheet>
-    </section>
+    </div>
   );
 }

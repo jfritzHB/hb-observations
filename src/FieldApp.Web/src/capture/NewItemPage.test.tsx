@@ -3,34 +3,31 @@ import { describe, expect, it } from 'vitest';
 import { installFakeApi } from '../test/fakeApi';
 import { renderApp } from '../test/renderApp';
 
-async function openCapture() {
-  installFakeApi();
-  const view = renderApp('/projects/p-001/new-item');
-  await screen.findByRole('heading', { level: 1, name: 'New item' });
-  await screen.findByRole('button', { name: /Choose area/ });
-  return view;
+async function openCapture(state?: unknown) {
+  const fetchMock = installFakeApi();
+  const view = renderApp('/projects/p-001/new-item', 'superintendent', state);
+  // The loading state also shows the heading, so wait for the loaded capture controls.
+  await screen.findByRole('combobox', { name: 'Where?' });
+  return { ...view, fetchMock };
 }
 
-function summaryValue(term: string): string | null {
-  const summary = screen.getByRole('region', { name: 'Selections' });
-  const dt = within(summary).getByText(term, { selector: 'dt' });
-  return dt.nextElementSibling?.textContent ?? null;
-}
+const where = () => screen.getByRole('combobox', { name: 'Where?' });
+const camera = () => screen.getByRole('button', { name: /Take photo/ });
 
-describe('capture selection', () => {
-  it('presents Project, Area, Trade, Type and Camera in order, with the project locked', async () => {
+describe('rapid capture', () => {
+  it('shows a compact project context, then Where, Trade, Type and Take photo, with no step numbers or summary', async () => {
     await openCapture();
 
-    expect(screen.getByRole('region', { name: 'Project' })).toHaveTextContent('Mos Eisley Municipal Center');
+    expect(screen.getByText('Mos Eisley Municipal Center')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Change project/ })).toHaveAttribute('href', '/projects');
+    expect(screen.queryByRole('region', { name: 'Selections' })).not.toBeInTheDocument();
+    expect(document.querySelector('.capture-step__number')).toBeNull();
 
     const inOrder = [
-      screen.getByRole('region', { name: 'Project' }),
-      screen.getByRole('region', { name: 'Area' }),
-      screen.getByRole('region', { name: 'Trade' }),
-      screen.getByRole('group', { name: 'Type' }),
-      screen.getByRole('region', { name: 'Selections' }),
-      screen.getByRole('button', { name: /Take photo/ }),
+      where(),
+      screen.getByRole('group', { name: 'Trade' }),
+      screen.getByRole('group', { name: 'Item type' }),
+      camera(),
     ];
     for (let index = 1; index < inOrder.length; index++) {
       const previous = inOrder[index - 1];
@@ -40,77 +37,225 @@ describe('capture selection', () => {
     }
   });
 
-  it('selects an area from the hierarchical list without typing, showing the full path', async () => {
+  it('searches structured areas as the user types and announces the matches', async () => {
     const { user } = await openCapture();
 
-    await user.click(screen.getByRole('button', { name: /Choose area/ }));
-    const sheet = screen.getByRole('dialog', { name: 'Choose area' });
-    await user.click(within(sheet).getByRole('button', { name: 'Building A / Level 2 / Office 201' }));
+    await user.type(where(), 'office');
+
+    expect(where()).toHaveAttribute('aria-expanded', 'true');
+    const options = within(screen.getByRole('listbox', { name: 'Matching areas' })).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Building A / Level 2 / Office 201',
+      'Building A / Level 2 / Office 202',
+    ]);
+    expect(screen.getByText(/2 matching areas/)).toBeInTheDocument();
+  });
+
+  it('selects a structured area, shows its full path, and clears the search text', async () => {
+    const { user } = await openCapture();
+
+    await user.type(where(), '201');
+    await user.click(screen.getByRole('option', { name: 'Building A / Level 2 / Office 201' }));
+
+    expect(
+      screen.getByText('Building A / Level 2 / Office 201', { selector: '.location-area__path' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Remove area Building A / Level 2 / Office 201' }),
+    ).toBeInTheDocument();
+    expect(where()).toHaveValue('');
+    expect(where()).toHaveAttribute('placeholder', 'Add detail, e.g. North wall');
+    expect(where()).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('combines a structured area with a location detail', async () => {
+    const { user } = await openCapture();
+
+    await user.type(where(), '201');
+    await user.click(screen.getByRole('option', { name: 'Building A / Level 2 / Office 201' }));
+    await user.type(where(), 'North wall');
+
+    expect(where()).toHaveValue('North wall');
+    expect(where()).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.getByText('Building A / Level 2 / Office 201', { selector: '.location-area__path' }),
+    ).toBeInTheDocument();
+  });
+
+  it('accepts a location detail with no structured area and creates no area', async () => {
+    const { user, fetchMock } = await openCapture();
+
+    await user.type(where(), 'Unit 214');
+    await user.click(screen.getByRole('button', { name: 'Drywall' }));
+    await user.click(screen.getByRole('radio', { name: 'Punch List' }));
+
+    expect(where()).toHaveValue('Unit 214');
+    expect(document.querySelector('.location-area')).toBeNull();
+    expect(camera()).toHaveAccessibleDescription('Photo capture arrives in the next release');
+    const writes = fetchMock.mock.calls.filter(([, init]) => (init?.method ?? 'GET') !== 'GET');
+    expect(writes).toEqual([]);
+  });
+
+  it('limits location detail to 120 characters', async () => {
+    await openCapture();
+
+    expect(where()).toHaveAttribute('maxLength', '120');
+  });
+
+  it('is fully keyboard operable: arrows move through results, Enter selects, Escape closes', async () => {
+    const { user } = await openCapture();
+
+    await user.click(where());
+    await user.keyboard('office');
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    const second = screen.getByRole('option', { name: 'Building A / Level 2 / Office 202' });
+    expect(second).toHaveAttribute('aria-selected', 'true');
+    expect(where()).toHaveAttribute('aria-activedescendant', second.id);
+
+    await user.keyboard('{Escape}');
+    expect(where()).toHaveAttribute('aria-expanded', 'false');
+    expect(where()).toHaveValue('office');
+
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(
+      screen.getByText('Building A / Level 2 / Office 201', { selector: '.location-area__path' }),
+    ).toBeInTheDocument();
+    expect(where()).toHaveFocus();
+  });
+
+  it('removes a selected area in one tap and keeps the detail', async () => {
+    const { user } = await openCapture();
+    await user.type(where(), '201');
+    await user.click(screen.getByRole('option', { name: 'Building A / Level 2 / Office 201' }));
+    await user.type(where(), 'North wall');
+
+    await user.click(screen.getByRole('button', { name: /Remove area/ }));
+
+    expect(document.querySelector('.location-area')).toBeNull();
+    expect(where()).toHaveValue('North wall');
+  });
+
+  it('browses the area hierarchy without typing, including non-leaf areas', async () => {
+    const { user } = await openCapture();
+
+    await user.click(screen.getByRole('button', { name: 'Browse areas' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Browse areas' })).getByRole('button', {
+        name: 'Building A / Level 2',
+      }),
+    );
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Area: Building A \/ Level 2 \/ Office 201/ }),
+      screen.getByText('Building A / Level 2', { selector: '.location-area__path' }),
     ).toBeInTheDocument();
-    expect(summaryValue('Area')).toBe('Building A / Level 2 / Office 201');
   });
 
-  it('filters areas by every search term', async () => {
+  it('offers recent locations, including area plus detail, as one-tap chips next time', async () => {
+    const first = await openCapture();
+    await first.user.type(where(), '201');
+    await first.user.click(screen.getByRole('option', { name: 'Building A / Level 2 / Office 201' }));
+    await first.user.type(where(), 'North wall');
+    await first.user.tab();
+    first.unmount();
+
     const { user } = await openCapture();
-
-    await user.click(screen.getByRole('button', { name: /Choose area/ }));
-    const sheet = screen.getByRole('dialog', { name: 'Choose area' });
-    await user.type(within(sheet).getByRole('searchbox', { name: /Search areas/ }), 'level 2 office');
-
-    expect(within(sheet).getByRole('status')).toHaveTextContent('2 areas match');
-    expect(
-      within(sheet)
-        .getAllByRole('button', { name: /Office/ })
-        .map((button) => button.textContent),
-    ).toEqual(['Building A / Level 2 / Office 201', 'Building A / Level 2 / Office 202']);
-  });
-
-  it('offers recently used areas first on the next capture', async () => {
-    const { user, unmount } = await openCapture();
-    await user.click(screen.getByRole('button', { name: /Choose area/ }));
+    const recent = screen.getByRole('group', { name: 'Recent locations' });
     await user.click(
-      within(screen.getByRole('dialog')).getByRole('button', { name: 'Building A / Level 2 / Office 201' }),
+      within(recent).getByRole('button', { name: 'Building A / Level 2 / Office 201, North wall' }),
     );
-    unmount();
 
-    await openCapture();
-
-    const recent = screen.getByRole('group', { name: 'Recent areas' });
     expect(
-      within(recent).getByRole('button', { name: 'Building A / Level 2 / Office 201' }),
+      screen.getByText('Building A / Level 2 / Office 201', { selector: '.location-area__path' }),
     ).toBeInTheDocument();
+    expect(where()).toHaveValue('North wall');
   });
 
-  it('shows the responsible company immediately after a trade is chosen, with no company picker', async () => {
+  it('shows five trade chips plus More, and the responsible company once a trade is chosen', async () => {
     const { user } = await openCapture();
+    const tradeGroup = screen.getByRole('group', { name: 'Trade' });
 
-    const drywall = screen.getByRole('button', { name: 'Drywall' });
-    await user.click(drywall);
+    expect(within(tradeGroup).getAllByRole('button')).toHaveLength(6);
+    expect(screen.queryByText(/Responsible:/)).not.toBeInTheDocument();
 
-    expect(screen.getByRole('button', { name: 'Drywall' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('Responsible company', { selector: '.responsible__label' })).toBeInTheDocument();
-    expect(screen.getByText('Dune Sea Drywall Co.', { selector: '.responsible__value' })).toBeInTheDocument();
-    expect(summaryValue('Responsible company')).toBe('Dune Sea Drywall Co.');
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(screen.queryByText(/choose (a )?(company|subcontractor)/i)).not.toBeInTheDocument();
+    await user.click(within(tradeGroup).getByRole('button', { name: 'Drywall' }));
+
+    expect(within(tradeGroup).getByRole('button', { name: 'Drywall' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByText('Dune Sea Drywall Co.')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /company|subcontractor/i })).not.toBeInTheDocument();
   });
 
-  it('lists every trade with its company under View all', async () => {
+  it('lists every trade with its company under More', async () => {
     const { user } = await openCapture();
 
-    await user.click(screen.getByRole('button', { name: 'View all trades (7)' }));
-    const sheet = screen.getByRole('dialog', { name: 'Choose trade' });
-    expect(within(sheet).getAllByRole('button', { pressed: false })).toHaveLength(7);
-
+    await user.click(screen.getByRole('button', { name: 'More trades (7 total)' }));
+    const sheet = screen.getByRole('dialog', { name: 'All trades' });
     await user.click(within(sheet).getByRole('button', { name: /Plumbing/ }));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(summaryValue('Trade')).toBe('Plumbing');
-    expect(summaryValue('Responsible company')).toBe("Beggar's Canyon Plumbing");
+    expect(screen.getByRole('button', { name: 'Plumbing' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText("Beggar's Canyon Plumbing")).toBeInTheDocument();
+  });
+
+  it('chooses exactly one of Observation or Punch List', async () => {
+    const { user } = await openCapture();
+
+    await user.click(screen.getByRole('radio', { name: 'Punch List' }));
+
+    expect(screen.getByRole('radio', { name: 'Punch List' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Observation' })).not.toBeChecked();
+  });
+
+  it('keeps Take photo as a disabled boundary that turns prominent when ready', async () => {
+    const { user } = await openCapture();
+
+    expect(camera()).toHaveAttribute('aria-disabled', 'true');
+    expect(camera()).not.toHaveClass('camera-button--ready');
+    expect(camera()).toHaveAccessibleDescription('Set where, trade and type');
+
+    await user.type(where(), '201');
+    await user.click(screen.getByRole('option', { name: 'Building A / Level 2 / Office 201' }));
+    await user.click(screen.getByRole('button', { name: 'Drywall' }));
+    await user.click(screen.getByRole('radio', { name: 'Punch List' }));
+
+    expect(camera()).toHaveAttribute('aria-disabled', 'true');
+    expect(camera()).toHaveClass('camera-button--ready');
+    expect(camera()).toHaveAccessibleDescription('Photo capture arrives in the next release');
+  });
+
+  it('clears everything in one tap', async () => {
+    const { user } = await openCapture();
+    await user.type(where(), 'Unit 214');
+    await user.click(screen.getByRole('button', { name: 'Drywall' }));
+    await user.click(screen.getByRole('radio', { name: 'Observation' }));
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(where()).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Drywall' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('radio', { name: 'Observation' })).not.toBeChecked();
+  });
+
+  it('starts from a retained capture context, as Capture Another will', async () => {
+    await openCapture({
+      captureContext: {
+        areaId: 'a-A2-201',
+        locationDetail: 'North wall',
+        tradeId: 'dry',
+        itemType: 'PunchList',
+      },
+    });
+
+    expect(
+      screen.getByText('Building A / Level 2 / Office 201', { selector: '.location-area__path' }),
+    ).toBeInTheDocument();
+    expect(where()).toHaveValue('North wall');
+    expect(screen.getByRole('button', { name: 'Drywall' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('radio', { name: 'Punch List' })).toBeChecked();
+    expect(camera()).toHaveClass('camera-button--ready');
   });
 
   it('explains when no trades are available for capture', async () => {
@@ -118,57 +263,6 @@ describe('capture selection', () => {
     renderApp('/projects/p-001/new-item');
 
     expect(await screen.findByText(/No trades are set up for capture/)).toBeInTheDocument();
-  });
-
-  it('chooses exactly one of Observation or Punch List', async () => {
-    const { user } = await openCapture();
-    const type = screen.getByRole('group', { name: /Type/ });
-
-    expect(
-      within(type)
-        .getAllByRole('radio')
-        .map((radio) => radio.closest('label')?.textContent),
-    ).toEqual(['Observation', 'Punch List']);
-
-    await user.click(within(type).getByRole('radio', { name: 'Punch List' }));
-
-    expect(within(type).getByRole('radio', { name: 'Punch List' })).toBeChecked();
-    expect(within(type).getByRole('radio', { name: 'Observation' })).not.toBeChecked();
-    expect(summaryValue('Type')).toBe('Punch List');
-  });
-
-  it('keeps the camera as a disabled boundary before and after the selections are complete', async () => {
-    const { user } = await openCapture();
-    const camera = screen.getByRole('button', { name: /Take photo/ });
-
-    expect(camera).toHaveAttribute('aria-disabled', 'true');
-    expect(camera).toHaveAccessibleDescription('Choose an area, trade and type first.');
-
-    await user.click(screen.getByRole('button', { name: /Choose area/ }));
-    await user.click(
-      within(screen.getByRole('dialog')).getByRole('button', { name: 'Building A / Level 2 / Office 201' }),
-    );
-    await user.click(screen.getByRole('button', { name: 'Drywall' }));
-    await user.click(screen.getByRole('radio', { name: 'Punch List' }));
-
-    expect(camera).toHaveAttribute('aria-disabled', 'true');
-    expect(camera).toHaveAccessibleDescription(/Selections complete. Photo capture is not available yet/);
-    expect(summaryValue('Area')).toBe('Building A / Level 2 / Office 201');
-    expect(summaryValue('Trade')).toBe('Drywall');
-    expect(summaryValue('Responsible company')).toBe('Dune Sea Drywall Co.');
-    expect(summaryValue('Type')).toBe('Punch List');
-  });
-
-  it('clears all selections with one tap', async () => {
-    const { user } = await openCapture();
-    await user.click(screen.getByRole('button', { name: 'Drywall' }));
-    await user.click(screen.getByRole('radio', { name: 'Observation' }));
-
-    await user.click(screen.getByRole('button', { name: 'Clear all' }));
-
-    expect(summaryValue('Trade')).toBe('Not selected');
-    expect(summaryValue('Type')).toBe('Not selected');
-    expect(screen.getByRole('radio', { name: 'Observation' })).not.toBeChecked();
   });
 
   it('shows Project not found for an inaccessible project', async () => {
