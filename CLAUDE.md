@@ -39,7 +39,8 @@ Before implementation, produce:
 - Primary touch targets are at least 44 by 44 CSS pixels.
 - The capture path must not require typing before the photo (Browse areas and recent chips give a no-typing path).
 - Capture location is a structured Area and/or a free-text Location Detail (max 120 characters); publishing requires at least one. Typed text is always Location Detail: a structured Area is attached only when the user explicitly taps a suggestion (never by automatic matching), and typed text never creates Area master data.
-- The capture context is Project, Area, Location Detail, Trade and Item Type. Capture Another retains all of it after save, each value individually changeable, so the user can rapidly capture another item; allow one-tap clearing.
+- The authoritative capture context is Project, structured Area (when selected), Location Detail (when present), Trade and Item Type. Capture Another retains all of it after save, each value individually changeable, so the user can rapidly capture another item; allow one-tap clearing.
+- Area suggestions stay project-wide even after an Area is selected; explicitly selecting another suggestion replaces the selected Area. Never alter Location Detail except through an explicit user action.
 - Show upload and AI analysis as separate progress states.
 - A failed AI call must never discard the photo or prevent manual entry and save.
 - Never label an unsynchronized local draft as saved to the server.
