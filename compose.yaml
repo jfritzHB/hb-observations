@@ -1,0 +1,39 @@
+name: construction-field-app
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__AppDb: Server=sql,1433;Database=FieldApp;User Id=sa;Password=${FIELDAPP_SQL_PASSWORD};Encrypt=True;TrustServerCertificate=True
+      Azure__StorageAccountUrl: ${FIELDAPP_STORAGE_ACCOUNT_URL:-}
+      Azure__PhotoContainer: ${FIELDAPP_PHOTO_CONTAINER:-field-item-photos}
+      AzureOpenAI__Endpoint: ${FIELDAPP_AZURE_OPENAI_ENDPOINT:-}
+      AzureOpenAI__DeploymentName: ${FIELDAPP_AZURE_OPENAI_DEPLOYMENT:-}
+    depends_on:
+      sql:
+        condition: service_healthy
+
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${FIELDAPP_SQL_PASSWORD}
+    ports:
+      - "14333:1433"
+    volumes:
+      - fieldapp-sql:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  fieldapp-sql:
