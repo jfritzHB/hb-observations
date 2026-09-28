@@ -67,6 +67,68 @@ docs/
 
 Start with `CLAUDE.md`, then implement Slice 0 and Slice 1 in `docs/08-implementation-plan.md`.
 
+## Local development
+
+Prerequisites: Docker, the .NET 10 SDK and Node.js 22.12 or later (the last two are only needed to work outside containers).
+
+### Run everything in containers (one command)
+
+Create a local `.env` once, setting `FIELDAPP_SQL_PASSWORD` to a strong password of your own (SQL Server requires upper/lower case, digits and symbols). `.env` is git-ignored; never commit it.
+
+```bash
+cp .env.example .env   # then edit FIELDAPP_SQL_PASSWORD
+```
+
+Then:
+
+```bash
+docker compose up --build
+```
+
+- App (API and compiled React app): <http://localhost:8080>
+- Liveness: <http://localhost:8080/health/live>; readiness, including the database: <http://localhost:8080/health/ready>
+- OpenAPI document (Development only): <http://localhost:8080/openapi/v1.json>
+- SQL Server: `localhost,14333` (user `sa`)
+
+The `sql-init` service creates the empty `FieldApp` database for local use. Schema changes are applied by a separate, controlled migration step, never by application startup.
+
+### Run the API and web app natively
+
+```bash
+docker compose up -d sql sql-init                        # database only
+dotnet user-secrets set ConnectionStrings:AppDb "Server=localhost,14333;Database=FieldApp;User Id=sa;Password=<your password>;Encrypt=True;TrustServerCertificate=True" --project src/FieldApp.Api
+dotnet run --project src/FieldApp.Api --launch-profile http # http://localhost:5001
+
+cd src/FieldApp.Web
+npm install
+npm run dev                                              # http://localhost:5173, proxies /api and /health to the API
+```
+
+### Checks (the same ones CI runs)
+
+```bash
+dotnet format FieldApp.sln --verify-no-changes
+dotnet build FieldApp.sln
+dotnet test --solution FieldApp.sln   # SQL Server integration tests use Testcontainers (Docker); they are skipped without Docker unless FIELDAPP_REQUIRE_DOCKER=true
+
+cd src/FieldApp.Web
+npm run typecheck && npm run lint && npm run format:check && npm test && npm run build
+```
+
+Browser (Playwright) tests run against a running instance and are skipped unless `FIELDAPP_E2E_BASE_URL` is set:
+
+```bash
+pwsh tests/FieldApp.E2ETests/bin/Debug/net10.0/playwright.ps1 install chromium   # once
+FIELDAPP_E2E_BASE_URL=http://localhost:8080 dotnet test --project tests/FieldApp.E2ETests
+```
+
+### Production image
+
+```bash
+docker build -t fieldapp .
+docker run --rm -p 8080:8080 fieldapp   # /health/live returns 200; /health/ready returns 503 until ConnectionStrings__AppDb is supplied
+```
+
 ## Hosting target
 
 The production container is stateless and listens on port `8080`, making it suitable for Azure Container Apps or Azure App Service for Containers. Azure SQL stores relational data and private Azure Blob Storage stores photos. Persistent application data must never be written inside the container filesystem.
