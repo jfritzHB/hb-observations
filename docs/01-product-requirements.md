@@ -94,6 +94,6 @@ For MVP simplicity, any authenticated user with access to the project may close 
 - Capture controls are usable in portrait orientation and direct sunlight with high contrast.
 - Refreshing during upload/review restores the draft.
 - Duplicate Save taps create one item, using an idempotency key.
-- Unauthorized project IDs return 404 or 403 according to the established security policy without leaking project data.
+- Unauthorized project IDs return 404 or 403 according to the resource-concealment policy in `docs/07-security-operations.md` without leaking project data.
 - AI and translation calls are auditable without storing hidden model reasoning.
 - Application passes automated accessibility checks for labels, focus, contrast and keyboard navigation.

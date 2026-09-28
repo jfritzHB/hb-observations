@@ -9,6 +9,8 @@ These do not block the repository foundation, but they must be resolved before t
 | Resolved | Must a responsible subcontractor be selected at creation? | No separate picker; Project Trade resolves the configured responsible company |
 | High | Should Spanish be saved automatically or only on request? | Explicit user action; always editable |
 | High | What is the approved photo retention/deletion policy? | Not assumed; must be approved before production |
+| Resolved | Unauthorized access: 404 or 403? | 401 unauthenticated; 404 when the resource is missing or the caller has no visibility of it; 403 when the resource is visible but the operation is not permitted (see `docs/07-security-operations.md`) |
+| Resolved | Is Responsible Company directly editable on an item? | No; always derived from Project + Trade via `ProjectTrade.ResponsibleCompanyId` and re-resolved when the Trade is explicitly changed |
 | Resolved | Will trade partners log in during MVP? | Yes; external authentication plus company/project-scoped visibility |
 | High | Must users create multiple complete items while the device has absolutely no cellular or Wi-Fi signal? | Awaiting decision; see offline choices below |
 | Medium | Can users choose existing gallery photos? | Yes, as camera fallback and supported input |

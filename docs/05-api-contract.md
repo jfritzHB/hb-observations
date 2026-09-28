@@ -82,7 +82,7 @@ Returns `202` with analysis ID and status URL. `GET /ai-analyses/{analysisId}` r
 - `GET /items/{itemId}`
 - `GET /projects/{projectId}/items?type=&status=&areaId=&tradeId=&cursor=`
 
-Patch uses an explicit request DTO, not arbitrary JSON Patch. Editable fields are Area, Trade, Company, Type, Priority, Title and descriptions.
+Patch uses an explicit request DTO, not arbitrary JSON Patch. Editable fields are Area, Trade, Type, Priority, Title and descriptions. Responsible Company is not directly editable: it is derived from Project + Trade through `ProjectTrade.ResponsibleCompanyId` (the authoritative mapping). Clients supply `tradeId`, never a company ID; when an item's Trade is explicitly changed, the server resolves and snapshots the Responsible Company from the new Project Trade mapping.
 
 ## Translation
 
@@ -120,8 +120,11 @@ Requires `If-Match`. Invalid transitions return 409 with allowed transitions. Fo
 
 ## Status codes
 
-- `400` validation, `401` unauthenticated, `403` unauthorized
-- `404` missing or concealed inaccessible resource
+The 401/403/404 choice follows the resource-concealment policy in `docs/07-security-operations.md`: visibility is checked before permission, so a project or item the caller cannot see returns 404 even for an operation they would also be forbidden to perform.
+
+- `400` validation, `401` unauthenticated
+- `403` authenticated caller can see the resource but may not perform the operation
+- `404` missing, or concealed because the caller has no visibility of it (same response in both cases)
 - `409` invariant/idempotency conflict
 - `412` ETag mismatch
 - `413` photo too large, `415` unsupported media type

@@ -35,7 +35,7 @@ Links User to Project with one or more roles and an optional CompanyId. Authoriz
 | `PunchListStatus?` | `Open`, `WorkRequired`, `ReadyForReview`, `NotAccepted`, `Closed`; populated only for Punch List |
 | `AreaId`, `AreaPathSnapshot` | Required |
 | `TradeId`, `TradeNameSnapshot` | Required |
-| `ResponsibleCompanyId`, snapshot | Derived from Project Trade at creation; not separately selected |
+| `ResponsibleCompanyId`, snapshot | Derived from Project Trade at creation; not separately selected and never directly editable |
 | `Title` | Required to publish, max 80 |
 | `DescriptionEnglish` | Required to publish, max 2,000 |
 | `DescriptionSpanish?` | Optional, max 2,000 |
