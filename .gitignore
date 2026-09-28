@@ -1,0 +1,45 @@
+# .NET build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.user
+*.suo
+*.rsuser
+.vs/
+
+# Frontend
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Compiled SPA copied into the API for hosting; produced by the build, never committed
+src/FieldApp.Api/wwwroot/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+*.pfx
+*.pem
+*.key
+
+# Local data (never commit real construction data or photos)
+*.db
+*.sqlite
+*.mdf
+*.ldf
+
+# Playwright
+playwright-report/
+test-results/
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db
