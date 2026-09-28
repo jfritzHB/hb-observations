@@ -1,31 +1,57 @@
 name: construction-field-app
 
+x-app-database: &app-database
+  ASPNETCORE_ENVIRONMENT: Development
+  ConnectionStrings__AppDb: Server=sql,1433;Database=FieldApp;User Id=sa;Password=${FIELDAPP_SQL_PASSWORD:?Set FIELDAPP_SQL_PASSWORD in .env - see README};Encrypt=True;TrustServerCertificate=True
+  # Local Blob Storage (Azurite). The account key below is Azurite's fixed, publicly documented development key,
+  # not a secret. In Azure, set Azure__StorageAccountUrl instead and use managed identity.
+  ConnectionStrings__PhotoStorage: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+  Azure__PhotoContainer: ${FIELDAPP_PHOTO_CONTAINER:-field-item-photos}
+
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+    image: fieldapp-local:latest
     ports:
-      - "8080:8080"
+      - "${FIELDAPP_APP_PORT:-8080}:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__AppDb: Server=sql,1433;Database=FieldApp;User Id=sa;Password=${FIELDAPP_SQL_PASSWORD};Encrypt=True;TrustServerCertificate=True
-      Azure__StorageAccountUrl: ${FIELDAPP_STORAGE_ACCOUNT_URL:-}
-      Azure__PhotoContainer: ${FIELDAPP_PHOTO_CONTAINER:-field-item-photos}
+      <<: *app-database
       AzureOpenAI__Endpoint: ${FIELDAPP_AZURE_OPENAI_ENDPOINT:-}
       AzureOpenAI__DeploymentName: ${FIELDAPP_AZURE_OPENAI_DEPLOYMENT:-}
     depends_on:
+      migrate:
+        condition: service_completed_successfully
+      azurite:
+        condition: service_started
+
+  # Explicit migration step, mirroring the Azure Container Apps migration job: the same image runs
+  # `migrate` (creating the database if needed and the private photo container) and exits before the app starts.
+  # The app never migrates itself. Locally it also loads the synthetic demo data set (refused in Production).
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fieldapp-local:latest
+    command: ["migrate", "--seed-demo-data"]
+    environment:
+      <<: *app-database
+    restart: "no"
+    depends_on:
       sql:
         condition: service_healthy
+      azurite:
+        condition: service_started
 
   sql:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: ${FIELDAPP_SQL_PASSWORD}
+      MSSQL_SA_PASSWORD: ${FIELDAPP_SQL_PASSWORD:?Set FIELDAPP_SQL_PASSWORD in .env - see README}
     ports:
-      - "14333:1433"
+      - "${FIELDAPP_SQL_PORT:-14333}:1433"
     volumes:
       - fieldapp-sql:/var/opt/mssql
     healthcheck:
@@ -35,5 +61,15 @@ services:
       retries: 12
       start_period: 20s
 
+  # Azure Blob Storage emulator for photos (blob service only). Data lives in a Docker volume, never in the app container.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--location", "/data", "--skipApiVersionCheck", "--loose"]
+    ports:
+      - "${FIELDAPP_BLOB_PORT:-10000}:10000"
+    volumes:
+      - fieldapp-blobs:/data
+
 volumes:
   fieldapp-sql:
+  fieldapp-blobs:

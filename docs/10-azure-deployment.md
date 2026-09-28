@@ -48,6 +48,8 @@ Configure the values represented in `.env.example` through Container Apps enviro
 
 Photos must go directly to Blob Storage through constrained upload grants or through a streaming API endpoint. Never place uploads under `wwwroot` or another container directory. Container replacement, scale-out and restart must not lose photos.
 
+Slice 2 implements the streaming API option through `IPhotoStorage`. Local Compose supplies `ConnectionStrings:PhotoStorage` for Azurite. For Azure, omit that connection string and configure `Azure:StorageAccountUrl` plus `Azure:PhotoContainer`; the same adapter uses `DefaultAzureCredential` and a private container. Grant the application identity the required Blob data permissions. The controlled migration command ensures the private container exists; readiness checks both SQL migrations/connectivity and Blob access. Configure retention for abandoned reservations and incoming `/upload` objects before production; automated cleanup is not included in Slice 2. Azure deployment and managed identity permissions must be validated in the target environment.
+
 ## Scale and cost controls
 
 Begin with one minimum replica for reliable interactive access if budget permits. Configure conservative maximum replicas and concurrency. Set Azure OpenAI rate/cost limits, blob lifecycle policies and SQL service tier deliberately. Do not enable scale-to-zero until cold-start behavior has been tested with field users.

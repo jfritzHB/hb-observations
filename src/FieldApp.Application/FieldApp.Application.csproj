@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Commands, queries, validators, authorization requirements and ports. No EF Core, ASP.NET Core or Azure dependencies. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\FieldApp.Domain\FieldApp.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+</Project>

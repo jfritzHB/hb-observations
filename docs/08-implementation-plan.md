@@ -23,30 +23,48 @@ Build vertical slices that result in demonstrable field behavior. Do not provisi
 
 **Done:** superintendent can select only authorized project data on a 360px viewport, and Trade selection resolves a responsible company without another capture field.
 
+## Slice 1.1 Field capture UX refinement
+
+Capture UX refinement only, from product-owner testing. No persistence, camera, AI or translation.
+
+- Compact project context bar; no numbered steps; no duplicate selections summary before the camera.
+- Single **Where?** location control: search/select structured Areas (full paths, recent first) or type a Location Detail (max 120 characters); both can be combined; Browse for no-typing selection; typed text never creates Areas.
+- Recent/common Trade chips plus More; compact read-only Responsible Company.
+- Prominent Observation / Punch List controls.
+- Docked Take Photo boundary (still disabled) that becomes prominent once location, trade and type are set.
+- Client capture-context model that a future Capture Another can pre-fill.
+- `ItemLocation` domain rule (Area and/or Location Detail) ahead of FieldItem.
+- Specification updates: location model, rapid capture, manual-first/optional AI description, explicit translation, resolved offline decision.
+
+**Done:** at 360px the path Project, location, Trade, Type, Take Photo needs no form-like review and minimal scrolling; the location combobox is keyboard and screen-reader operable; all Slice 1 authorization tests still pass.
+
 ## Slice 2 Durable capture and photo
 
-- IndexedDB local draft.
-- Server draft creation with idempotency.
-- Camera/file picker, compression, preview, upload/finalize and thumbnail.
+- IndexedDB local draft of the capture context (Area and/or Location Detail, Trade, Type) and photo: connection-interruption protection (not zero-signal operation).
+- Server draft creation with idempotency, including optional `areaId` and `locationDetail`.
+- Camera/file picker attached to the Take Photo boundary, compression, preview, upload/finalize and thumbnail.
 - Restore draft after refresh; precise upload/error states.
+- Manual English description editor with local persistence after photo acceptance (moved forward from Slice 3 by the product owner's Slice 2 handoff). No AI, translation or publishing in this slice.
 
-**Done:** capture survives refresh and failed upload; retry produces one server item and one photo.
+**Done:** capture survives refresh, failed upload and a connectivity drop after load; retry produces one server item and one photo.
 
 ## Slice 3 AI description
 
+- Manual English description entry available immediately after the photo (the default path).
+- Explicit **Generate description with AI** action; superintendent-oriented, type-specific prompt using Area path, Location Detail, Trade and Responsible Company context.
 - AI provider abstraction and fake provider for tests/local use.
 - Background analysis job and status API.
 - Strict structured output validation and prompt versioning.
 - Review/edit UI and manual fallback.
 
-**Done:** successful, slow, invalid-output and unavailable-provider paths are tested; none loses the photo.
+**Done:** successful, slow, invalid-output and unavailable-provider paths are tested; none loses the photo; an item can be described without AI.
 
 ## Slice 4 Translation and publish
 
-- Translation operation and source hash.
+- Explicit Translate to Spanish from the current English text (typed, generated or edited); translation operation and source hash.
 - Editable Spanish field and stale indicator.
-- Publish validation and server item numbering.
-- Capture Another with retained context.
+- Publish validation (including location: Area and/or Location Detail) and server item numbering.
+- Capture Another retaining Project, Area, Location Detail, Trade and Item Type, each individually changeable.
 
 **Done:** English is never overwritten; duplicate taps remain idempotent; published item is queryable.
 

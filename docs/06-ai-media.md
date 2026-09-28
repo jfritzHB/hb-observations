@@ -4,13 +4,19 @@
 
 The model drafts text from visible evidence and supplied context. It does not determine legal responsibility, hidden conditions, code compliance, severity, or whether work is safe. User-selected Area, Trade and Type are authoritative inputs.
 
+## When analysis runs
+
+AI description drafting is optional and runs only when the user explicitly chooses **Generate description with AI** after a photo is uploaded. The manual path (typing an English description) is always available first, and AI is never required to save or publish an item. The generated text is an editable suggestion; the user decides what is saved.
+
 ## Analysis input
 
 - One or more finalized photos via short-lived server-authorized access
-- Item Type
-- Area path
-- Selected Trade
-- Optional user note
+- Item Type (authoritative)
+- Structured Area path, if selected
+- Location Detail, if entered
+- Selected Trade (authoritative)
+- Responsible Company, as contextual metadata where appropriate
+- Optional user note (if supported later)
 - Organization terminology and allowed output language
 
 Do not send user identity, customer contact information, unrelated project data or public blob URLs.
@@ -32,9 +38,16 @@ Use strict JSON schema structured output when supported. Validate again server-s
 
 ## Description prompt contract
 
+The model writes from the perspective of a construction superintendent documenting the item, using practical construction terminology.
+
+- **Punch List:** focus on visible incomplete or nonconforming work relevant to the selected trade, and draft concise, professional corrective language when the visible evidence supports it.
+- **Observation:** neutrally document the visible condition, concern or follow-up. Do not characterize every observation as defective work.
+
 The system prompt must direct the model to:
 
 - Describe only what is clearly visible and relevant to the selected item type.
+- Treat the selected Trade and Item Type as authoritative; never silently change the Trade (a possible mismatch is flagged separately via `possibleTradeMismatch`).
+- Not assign contractual or legal responsibility, claim hidden conditions, determine code compliance or make unsupported safety declarations.
 - Use concise, neutral construction language and an actionable correction only when justified.
 - Avoid naming people, assigning blame, estimating cost, declaring code violations or claiming unsafe conditions.
 - Avoid inventing dimensions, materials or locations.
@@ -44,7 +57,7 @@ The system prompt must direct the model to:
 
 ## Translation contract
 
-Translation is a separate operation using the final current English text. The prompt must preserve meaning, measurements, product names and construction terminology; produce neutral professional Spanish; and return only `{ "translatedText": "..." }`. Do not append Spanish to English. Store source hash and model/prompt version.
+Translation runs only when the user explicitly chooses **Translate to Spanish**, after English text exists, whether it was typed manually, AI-generated, or AI-generated and then edited. It writes a separate editable Spanish field, never overwrites English, and is marked stale if the English changes afterwards. Translation is a separate operation using the final current English text. The prompt must preserve meaning, measurements, product names and construction terminology; produce neutral professional Spanish; and return only `{ "translatedText": "..." }`. Do not append Spanish to English. Store source hash and model/prompt version.
 
 ## Safety and quality controls
 

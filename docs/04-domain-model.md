@@ -33,9 +33,10 @@ Links User to Project with one or more roles and an optional CompanyId. Authoriz
 | `LifecycleState` | `Draft` or `Published` |
 | `ObservationStatus?` | `Initiated`, `ReadyForReview`, `NotAccepted`, `Closed`; populated only for Observation |
 | `PunchListStatus?` | `Open`, `WorkRequired`, `ReadyForReview`, `NotAccepted`, `Closed`; populated only for Punch List |
-| `AreaId`, `AreaPathSnapshot` | Required |
+| `AreaId?`, `AreaPathSnapshot?` | Structured Area; optional when `LocationDetail` is present |
+| `LocationDetail?` | Free-text, item-specific location context, max 120 characters (for example `Unit 214`, `North wall`). Never creates or modifies Area master data |
 | `TradeId`, `TradeNameSnapshot` | Required |
-| `ResponsibleCompanyId`, snapshot | Derived from Project Trade at creation; not separately selected |
+| `ResponsibleCompanyId`, snapshot | Derived from Project Trade at creation; not separately selected and never directly editable |
 | `Title` | Required to publish, max 80 |
 | `DescriptionEnglish` | Required to publish, max 2,000 |
 | `DescriptionSpanish?` | Optional, max 2,000 |
@@ -67,11 +68,13 @@ Append-only audit record: item ID, event type, actor, occurred-at, correlation I
 ## Invariants
 
 - Published item requires at least one finalized photo.
+- Published item requires meaningful location: a structured Area, a Location Detail, or both. A draft may temporarily lack location. `FieldApp.Domain.Capture.ItemLocation` (Slice 1.1) encodes this rule ahead of FieldItem.
+- Any active Area (including non-leaf nodes) may be referenced by an item. Location Detail is item data only; it never creates or modifies Areas.
 - Observation transitions normally follow `Initiated -> ReadyForReview -> Closed`; rejection uses `ReadyForReview -> NotAccepted`, and corrected work uses `NotAccepted -> ReadyForReview`.
 - Punch List transitions normally follow `Open -> WorkRequired -> ReadyForReview -> Closed`; rejection uses `ReadyForReview -> NotAccepted`, and corrected work uses `NotAccepted -> ReadyForReview`.
 - During MVP any active project member may close. Reopening is explicit, requires a reason, and returns Observations to `Initiated` and Punch List items to `Open`.
 - Status permissions must be implemented as policies so the MVP rule can change without altering domain transitions.
-- Trade and Area snapshots update only by an explicit item edit, never when master data changes.
+- Trade and Area snapshots (and Location Detail) update only by an explicit item edit, never when master data changes.
 - Responsible Company is resolved and snapshotted from Project Trade whenever the item's Trade is explicitly changed.
 - Changing English text after translation sets `TranslationState=Stale` when its hash differs.
 - Deleting a photo is soft/controlled and audited; the last photo cannot be removed from a published item without adding a replacement.
