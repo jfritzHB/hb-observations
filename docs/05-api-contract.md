@@ -10,6 +10,10 @@ Base path: `/api/v1`. Use RFC 7807 Problem Details for errors. All writes accept
 - `POST /projects/{projectId}/areas` (PM/Admin)
 - `GET /projects/{projectId}/trades` (includes configured responsible company display data)
 - `GET /projects/{projectId}/companies?tradeId=`
+- `GET /projects/{projectId}/areas/{areaId}` (target of the `Location` header returned by area creation)
+- `GET /me` (the resolved application user)
+
+The trades list contains only trades available for capture: the Project Trade is enabled, the trade is active, and it is mapped to an active responsible company. Areas returned for capture are active and have only active ancestors. `recent=true` is accepted; recency ordering needs a user's captured items, so until items exist it has no server-side effect and clients keep device-local recents. In the Development environment only, `GET /dev/personas` lists the synthetic personas used by the development authentication stub.
 
 ## Item capture
 

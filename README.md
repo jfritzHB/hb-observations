@@ -92,19 +92,62 @@ docker compose up --build
 - OpenAPI document (Development only): <http://localhost:8080/openapi/v1.json>
 - SQL Server: `localhost,14333` (user `sa`)
 
-The `sql-init` service creates the empty `FieldApp` database for local use. Schema changes are applied by a separate, controlled migration step, never by application startup.
+Before the app starts, the one-shot `migrate` service runs the same image with `migrate --seed-demo-data`. It applies EF Core migrations (creating the database if needed) and loads the synthetic demo data, then exits. This mirrors the production design: migrations run as a separate, controlled step (a Container Apps Job or pipeline step), never at application startup.
 
 ### Run the API and web app natively
 
 ```bash
-docker compose up -d sql sql-init                        # database only
+docker compose up -d sql                                   # database only
 dotnet user-secrets set ConnectionStrings:AppDb "Server=localhost,14333;Database=FieldApp;User Id=sa;Password=<your password>;Encrypt=True;TrustServerCertificate=True" --project src/FieldApp.Api
+dotnet run --project src/FieldApp.Api -- migrate --seed-demo-data   # apply migrations + synthetic data, then exit
 dotnet run --project src/FieldApp.Api --launch-profile http # http://localhost:5001
 
 cd src/FieldApp.Web
 npm install
 npm run dev                                              # http://localhost:5173, proxies /api and /health to the API
 ```
+
+### Development authentication (synthetic personas)
+
+Until Microsoft Entra ID is integrated, local development uses a persona stub: the client sends `X-Dev-Persona: <key>` and the server treats that as the signed-in identity. There are no passwords. The stub produces the same identity claims that Entra will, and everything downstream (application-user resolution, project membership authorization) is scheme-independent.
+
+- It is enabled only by `Authentication:Mode=Development` (set in `appsettings.Development.json`). The API **refuses to start** if that mode is configured in any environment other than Development. Without it, every `/api/v1` request returns 401.
+- In the app, choose a persona on first load, or switch under **More → Development persona**. With curl: `curl -H "X-Dev-Persona: superintendent" http://localhost:8080/api/v1/projects`.
+- `GET /api/v1/dev/personas` lists the personas, and exists only in that mode.
+
+| Persona key | Name | Access (all data is fictional) |
+| --- | --- | --- |
+| `superintendent` | Owen Lars | Superintendent on HB-TEST-001 and HB-TEST-002 |
+| `project-manager` | Beru Whitesun | Project Manager on HB-TEST-001 (can add areas); *inactive* membership on HB-TEST-002 |
+| `administrator` | Wedge Antilles | Administrator on all three projects |
+| `trade-partner` | Wuher Dunesea | Trade Partner for Dune Sea Drywall Co. on HB-TEST-001 only |
+| `unassigned` | Biggs Darklighter | Provisioned user with no memberships |
+
+Demo projects: **HB-TEST-001 Mos Eisley Municipal Center** (area hierarchy Building A/B with levels and rooms, seven capture-ready trades, and deliberately unavailable ones: Roofing unmapped, Concrete disabled, Glazing mapped to an inactive company, Fireproofing inactive), **HB-TEST-002 Anchorhead Water Treatment Plant** and **HB-TEST-003 Tosche Station Retrofit**.
+
+### Database migrations
+
+```bash
+dotnet tool restore                                            # installs the pinned dotnet-ef
+dotnet ef migrations add <Name> --project src/FieldApp.Infrastructure --startup-project src/FieldApp.Infrastructure --output-dir Persistence/Migrations
+dotnet ef migrations has-pending-model-changes --project src/FieldApp.Infrastructure --startup-project src/FieldApp.Infrastructure
+dotnet ef migrations script --idempotent --project src/FieldApp.Infrastructure --startup-project src/FieldApp.Infrastructure --output migrations.sql
+docker compose run --rm migrate                                # apply to the local Compose database
+```
+
+`/health/ready` reports unhealthy until every migration in the running build has been applied.
+
+### Manually testing Slice 1
+
+1. `docker compose up --build`, then open <http://localhost:8080> (use the browser's device toolbar at 360px wide, or a phone on the same network).
+2. Choose **Owen Lars (Superintendent)**. Projects shows HB-TEST-001 and HB-TEST-002 only.
+3. Open **Mos Eisley Municipal Center** and tap **New Item**.
+4. Tap **Choose area** and tap **Building A / Level 2 / Office 201** (search is optional).
+5. Tap **Drywall**. **Responsible company: Dune Sea Drywall Co.** appears immediately; there is no company picker.
+6. Tap **Punch List**. The Selections summary shows Area, Trade, Responsible company and Type above the camera. **Take photo** is a disabled boundary (photo capture arrives in Slice 2).
+7. Authorization boundary: **More → Beru Whitesun (Project Manager)** now shows only HB-TEST-001. Opening an HB-TEST-002 URL shows "Project not found". `curl -i -H "X-Dev-Persona: superintendent" -X POST -H "Content-Type: application/json" -d '{"name":"Roof"}' http://localhost:8080/api/v1/projects/<HB-TEST-001 id>/areas` returns 403, and the same call for HB-TEST-003 returns 404.
+
+Recent areas and trades are remembered on the device per user and project (browser storage), because server-side recency needs captured items, which later slices add.
 
 ### Checks (the same ones CI runs)
 
@@ -117,7 +160,7 @@ cd src/FieldApp.Web
 npm run typecheck && npm run lint && npm run format:check && npm test && npm run build
 ```
 
-Browser (Playwright) tests run against a running instance and are skipped unless `FIELDAPP_E2E_BASE_URL` is set:
+Browser (Playwright + axe accessibility) tests run at a 360px phone viewport against a running, seeded instance (`docker compose up`), and are skipped unless `FIELDAPP_E2E_BASE_URL` is set. Set `FIELDAPP_E2E_SCREENSHOTS=<dir>` to save phone screenshots for review.
 
 ```bash
 pwsh tests/FieldApp.E2ETests/bin/Debug/net10.0/playwright.ps1 install chromium   # once
