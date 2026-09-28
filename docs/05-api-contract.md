@@ -26,10 +26,13 @@ The trades list contains only trades available for capture: the Project Trade is
   "clientDraftId": "87f39a7f-d175-4dc8-a562-c132f9a7cf07",
   "type": "PunchList",
   "areaId": "970db077-d787-48b4-83b2-1966f6920f73",
+  "locationDetail": "North wall",
   "tradeId": "eb28dcc4-a8f2-49c7-93c8-43a8d89e42a3",
   "priority": "Normal"
 }
 ```
+
+`areaId` (an active Area of the project, any level) and `locationDetail` (free text, max 120 characters) are each optional on a draft, but publishing requires at least one of them. `locationDetail` is stored on the item only and never creates Area records.
 
 Returns `201`, draft representation, ETag and item-scoped media instructions. The server resolves `responsibleCompanyId` from the selected project Trade; clients cannot override it during capture.
 
@@ -65,6 +68,8 @@ Verifies blob existence, size/type/hash, extracts dimensions, creates thumbnail 
 }
 ```
 
+Called only when the user explicitly chooses **Generate description with AI**; items can always be described manually and saved without it. The server supplies the capture context (Item Type, Area path, Location Detail, Trade and Responsible Company) from the item; clients do not send it.
+
 Returns `202` with analysis ID and status URL. `GET /ai-analyses/{analysisId}` returns job state and, on success:
 
 ```json
@@ -86,7 +91,7 @@ Returns `202` with analysis ID and status URL. `GET /ai-analyses/{analysisId}` r
 - `GET /items/{itemId}`
 - `GET /projects/{projectId}/items?type=&status=&areaId=&tradeId=&cursor=`
 
-Patch uses an explicit request DTO, not arbitrary JSON Patch. Editable fields are Area, Trade, Type, Priority, Title and descriptions. Responsible Company is not directly editable: it is derived from Project + Trade through `ProjectTrade.ResponsibleCompanyId` (the authoritative mapping). Clients supply `tradeId`, never a company ID; when an item's Trade is explicitly changed, the server resolves and snapshots the Responsible Company from the new Project Trade mapping.
+Patch uses an explicit request DTO, not arbitrary JSON Patch. Editable fields are Area, Location Detail, Trade, Type, Priority, Title and descriptions. Responsible Company is not directly editable: it is derived from Project + Trade through `ProjectTrade.ResponsibleCompanyId` (the authoritative mapping). Clients supply `tradeId`, never a company ID; when an item's Trade is explicitly changed, the server resolves and snapshots the Responsible Company from the new Project Trade mapping.
 
 ## Translation
 
@@ -101,7 +106,7 @@ Patch uses an explicit request DTO, not arbitrary JSON Patch. Editable fields ar
 }
 ```
 
-Returns an editable translation suggestion and revision ID. It does not modify the item until the client submits an update.
+Requested only by explicit user action, from the current English text (typed, AI-generated, or edited). Returns an editable translation suggestion and revision ID. It does not modify the item until the client submits an update.
 
 ## Workflow
 

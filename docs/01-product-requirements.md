@@ -25,7 +25,9 @@ The application gives field superintendents a fast, consistent way to document c
 
 - **Observation:** A documented condition, concern or follow-up item. It may not represent defective work and does not automatically assign contractual responsibility.
 - **Punch List:** Work identified as incomplete or nonconforming and expected to be corrected before closeout.
-- **Area:** A selectable project location. MVP supports a hierarchy such as Building > Floor > Room/Zone, but the capture screen shows a flattened path.
+- **Area (structured):** A selectable project location from project master data. MVP supports a hierarchy such as Building > Floor > Room/Zone, and the capture screen shows the flattened path. Any active Area may be selected, including non-leaf nodes such as `Building A` or `Building A / Level 2`.
+- **Location Detail:** Free-text, item-specific location context entered during capture, such as `Unit 214`, `Room 103`, `East Corridor`, `North wall` or `Above entry door` (maximum 120 characters). It may accompany a structured Area or stand alone when no suitable Area exists. Typing a Location Detail never creates or changes Area master data.
+- **Item location:** A structured Area, a Location Detail, or both. An item cannot be published without at least one of them.
 - **Trade:** A controlled project-specific list such as Drywall, Painting, Electrical, Plumbing or Flooring.
 - **Responsible company:** Derived from the selected project Trade configuration. The field user does not separately select a subcontractor. Project administration must map each selectable trade to its responsible company for that project.
 
@@ -33,28 +35,37 @@ The application gives field superintendents a fast, consistent way to document c
 
 1. User selects a project or resumes the last project.
 2. User taps **New Item**.
-3. User selects Area, Trade, and Item Type.
+3. User identifies the location (search/select a structured Area and/or type a Location Detail), taps a Trade, and taps **Observation** or **Punch List**.
 4. User captures a photo or chooses one from the device.
 5. The app stores a local draft immediately and begins upload.
-6. After upload, the server requests an AI description using the chosen Area, Trade and Item Type as context.
-7. The app presents an editable English title and description with an **AI suggestion** label.
-8. User may edit English text and tap **Translate to Spanish**.
-9. Translation is written to a separate editable Spanish field. The English field is not overwritten.
-10. User saves. The app confirms server persistence and offers **Capture Another** while retaining Area, Trade and Item Type.
-11. The selected Trade automatically associates the configured responsible trade partner company.
+6. After upload the user describes the item in English by either path:
+   - **Manual:** type their own description immediately. AI is never required to save an item.
+   - **AI assisted:** explicitly tap **Generate description with AI**. The server drafts an editable title and description from the photo and the capture context, labelled **AI suggestion**.
+7. User may edit the English text and explicitly tap **Translate to Spanish**, whether the English was typed, generated, or generated and then edited.
+8. Translation is written to a separate editable Spanish field. The English field is not overwritten.
+9. User saves. The app confirms server persistence and offers **Capture Another**, carrying forward Project, Area, Location Detail (where appropriate), Trade and Item Type, each individually changeable.
+10. The selected Trade automatically associates the configured responsible trade partner company.
+
+The field mental model is: walk into a location, identify it, tap the trade, tap Observation or Punch List, take the photo. Capture must feel like a field tool, not an administrative form.
 
 ## Required behaviors
 
 ### Item creation
 
-- Area, Trade, Item Type, English description and at least one photo are required for final save.
+- Location (a structured Area and/or a Location Detail), Trade, Item Type, English description and at least one photo are required for final save.
 - AI is optional. Manual description entry must always work.
 - User can retake/remove a photo before final save.
 - MVP supports one primary photo plus additional photos after creation.
 - The server allocates an immutable project-scoped item number.
 
+### Connectivity (resolved for MVP)
+
+MVP provides **connection-interruption protection**: if the app was loaded while connected and connectivity drops during capture, the current draft and photo are preserved on the device and can be retried/resumed when connectivity returns (Slice 2). MVP does **not** promise complete zero-signal operation (launching with no connectivity, browsing synchronized reference data offline, capturing a whole inspection offline, a multi-item sync queue, or offline conflict resolution). That is deferred until field testing demonstrates the need.
+
 ### AI review
 
+- AI drafting happens only on explicit request (**Generate description with AI**); manual entry is always available first.
+- AI writes from the perspective of a construction superintendent documenting the selected Item Type (see `docs/06-ai-media.md`).
 - AI returns a short title and factual English description.
 - The user-selected Trade remains authoritative. AI may flag a possible mismatch but may not silently replace it.
 - The UI must identify AI-generated text until the user accepts or edits it.
