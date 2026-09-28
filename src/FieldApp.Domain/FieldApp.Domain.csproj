@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Entities, value objects, enums and transition rules. No EF Core, ASP.NET Core or Azure dependencies. -->
+
+</Project>

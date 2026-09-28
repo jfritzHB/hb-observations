@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Adapters: EF Core, Blob Storage, Azure OpenAI, background jobs and identity. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\FieldApp.Application\FieldApp.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FieldApp.UnitTests" />
+  </ItemGroup>
+
+</Project>
