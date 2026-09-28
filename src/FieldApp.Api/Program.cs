@@ -1,13 +1,26 @@
+using System.Text.Json.Serialization;
+using FieldApp.Api.Authentication;
 using FieldApp.Api.Correlation;
+using FieldApp.Api.Database;
+using FieldApp.Api.Endpoints;
 using FieldApp.Api.Health;
 using FieldApp.Application;
+using FieldApp.Application.Abstractions;
 using FieldApp.Infrastructure;
 using Microsoft.AspNetCore.HttpOverrides;
 
-var builder = WebApplication.CreateBuilder(args);
+// `migrate [--seed-demo-data]` runs the database command and exits instead of serving HTTP.
+var databaseCommand = DatabaseCommand.Parse(args);
+
+var builder = WebApplication.CreateBuilder(databaseCommand is null ? args : []);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddFieldAppAuthentication();
+builder.Services.AddScoped<ICorrelationContext, HttpCorrelationContext>();
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 // RFC 7807 Problem Details for every error response, carrying the correlation ID.
 builder.Services.AddProblemDetails(options =>
@@ -46,6 +59,14 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 
+// Persona authentication must never be active outside Development.
+AuthenticationSetup.EnsureSafeConfiguration(app.Environment, app.Configuration);
+
+if (databaseCommand is not null)
+{
+    return await databaseCommand.RunAsync(app.Services, app.Lifetime.ApplicationStopping);
+}
+
 app.UseForwardedHeaders();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
@@ -54,12 +75,21 @@ app.UseStatusCodePages();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
 app.MapHealthEndpoints();
+app.MapReferenceDataEndpoints();
+
+if (AuthenticationSetup.IsDevelopmentMode(app.Configuration))
+{
+    app.MapDevelopmentPersonaEndpoints();
+}
 
 // Unmatched API routes return Problem Details, never the SPA shell.
 app.MapFallback("/api/{**path}", () => Results.Problem(
@@ -69,4 +99,5 @@ app.MapFallback("/api/{**path}", () => Results.Problem(
 // Client-side routes are served by the compiled React application.
 app.MapFallbackToFile("index.html");
 
-app.Run();
+await app.RunAsync();
+return 0;

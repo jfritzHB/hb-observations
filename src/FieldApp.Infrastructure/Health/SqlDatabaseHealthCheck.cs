@@ -6,10 +6,11 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 namespace FieldApp.Infrastructure.Health;
 
 /// <summary>
-/// Readiness check: the application database connection string is configured and the
-/// database answers a trivial query. The registration timeout bounds the check.
+/// Readiness check: the application database connection string is configured, the database answers a trivial
+/// query, and every migration this build knows about has been applied (so a new revision is not given traffic
+/// before its migration step has run). The registration timeout bounds the check.
 /// </summary>
-internal sealed class SqlDatabaseHealthCheck(IConfiguration configuration) : IHealthCheck
+internal sealed class SqlDatabaseHealthCheck(IConfiguration configuration, IMigrationCatalog migrations) : IHealthCheck
 {
     public const string ConnectionStringName = "AppDb";
 
@@ -38,10 +39,13 @@ internal sealed class SqlDatabaseHealthCheck(IConfiguration configuration) : IHe
 
         // Some connection phases (such as DNS resolution) ignore cancellation; WaitAsync guarantees the
         // registration timeout is honoured even then.
-        return await ProbeAsync(builder.ConnectionString, cancellationToken).WaitAsync(cancellationToken);
+        return await ProbeAsync(builder.ConnectionString, migrations.KnownMigrations, cancellationToken).WaitAsync(cancellationToken);
     }
 
-    private static async Task<HealthCheckResult> ProbeAsync(string connectionString, CancellationToken cancellationToken)
+    private static async Task<HealthCheckResult> ProbeAsync(
+        string connectionString,
+        IReadOnlyCollection<string> knownMigrations,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -49,10 +53,28 @@ internal sealed class SqlDatabaseHealthCheck(IConfiguration configuration) : IHe
             await connection.OpenAsync(cancellationToken);
 
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT 1";
-            await command.ExecuteScalarAsync(cancellationToken);
+            command.CommandText = "SELECT OBJECT_ID(N'[dbo].[__EFMigrationsHistory]', N'U')";
+            if (await command.ExecuteScalarAsync(cancellationToken) is null or DBNull)
+            {
+                return knownMigrations.Count == 0
+                    ? HealthCheckResult.Healthy()
+                    : HealthCheckResult.Unhealthy("Database schema has not been migrated.");
+            }
 
-            return HealthCheckResult.Healthy();
+            command.CommandText = "SELECT [MigrationId] FROM [dbo].[__EFMigrationsHistory]";
+            var applied = new HashSet<string>(StringComparer.Ordinal);
+            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    applied.Add(reader.GetString(0));
+                }
+            }
+
+            var pending = knownMigrations.Count(migration => !applied.Contains(migration));
+            return pending == 0
+                ? HealthCheckResult.Healthy()
+                : HealthCheckResult.Unhealthy($"Database schema is missing {pending} migration(s).");
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException)
         {

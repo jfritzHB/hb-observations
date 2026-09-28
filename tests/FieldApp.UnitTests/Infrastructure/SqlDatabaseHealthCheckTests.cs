@@ -41,6 +41,11 @@ public sealed class SqlDatabaseHealthCheckTests
             })
             .Build();
 
-        return new SqlDatabaseHealthCheck(configuration);
+        return new SqlDatabaseHealthCheck(configuration, new NoMigrations());
+    }
+
+    private sealed class NoMigrations : IMigrationCatalog
+    {
+        public IReadOnlyCollection<string> KnownMigrations => [];
     }
 }

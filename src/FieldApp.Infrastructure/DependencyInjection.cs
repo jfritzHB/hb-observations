@@ -1,4 +1,10 @@
+using FieldApp.Application.Authorization;
+using FieldApp.Application.Identity;
+using FieldApp.Application.ReferenceData;
 using FieldApp.Infrastructure.Health;
+using FieldApp.Infrastructure.Persistence;
+using FieldApp.Infrastructure.Seeding;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +20,37 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        // The connection string is read when a context is created, so a missing value surfaces through
+        // readiness (and failed requests) instead of preventing startup.
+        services.AddDbContext<FieldAppDbContext>((provider, options) =>
+        {
+            var connectionString = provider.GetRequiredService<IConfiguration>()
+                .GetConnectionString(SqlDatabaseHealthCheck.ConnectionStringName);
+
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                options.UseSqlServer(sql => sql.EnableRetryOnFailure());
+            }
+            else
+            {
+                options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure());
+            }
+        });
+
+        services.AddScoped<ReferenceDataReader>();
+        services.AddScoped<IReferenceDataReader>(provider => provider.GetRequiredService<ReferenceDataReader>());
+        services.AddScoped<IProjectMembershipReader>(provider => provider.GetRequiredService<ReferenceDataReader>());
+        services.AddScoped<IApplicationUserResolver>(provider => provider.GetRequiredService<ReferenceDataReader>());
+
+        services.AddScoped<EfWriteStore>();
+        services.AddScoped<IAreaStore>(provider => provider.GetRequiredService<EfWriteStore>());
+        services.AddScoped<IAuditLog>(provider => provider.GetRequiredService<EfWriteStore>());
+        services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<EfWriteStore>());
+
+        services.AddScoped<DatabaseMigrator>();
+        services.AddScoped<DemoDataSeeder>();
+
+        services.AddScoped<IMigrationCatalog, EfMigrationCatalog>();
         services.AddHealthChecks()
             .AddCheck<SqlDatabaseHealthCheck>("database", tags: [HealthCheckTags.Ready], timeout: _readinessTimeout);
 
